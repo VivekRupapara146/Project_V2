@@ -7,6 +7,7 @@ Designed to be consumed by Flask's streaming response.
 import os
 import cv2
 import logging
+import threading
 from utils.detector   import detect
 from utils.visualizer import draw_boxes
 
@@ -19,6 +20,21 @@ TARGET_FPS   = 30
 
 # Allowed video upload extensions
 ALLOWED_VIDEO_EXTENSIONS = {"mp4", "avi", "mov", "mkv", "webm"}
+
+_stop_event = threading.Event()
+_is_streaming = False
+
+def request_stop():
+    """Request the video stream to stop."""
+    _stop_event.set()
+
+def clear_stop():
+    """Clear the stop request."""
+    _stop_event.clear()
+
+def is_streaming() -> bool:
+    """Return whether a stream is currently active."""
+    return _is_streaming
 
 
 def _open_capture(source) -> cv2.VideoCapture:
@@ -57,6 +73,8 @@ def generate_frames(source=0, user_email: str = None):
     Yields:
         bytes: Encoded JPEG frame ready for HTTP streaming.
     """
+    global _is_streaming
+
     try:
         cap = _open_capture(source)
     except RuntimeError as e:
@@ -64,9 +82,11 @@ def generate_frames(source=0, user_email: str = None):
         return
 
     logger.info(f"[stream] 🎥 Streaming started from source: {source!r}")
+    _is_streaming = True
+    clear_stop()
 
     try:
-        while True:
+        while not _stop_event.is_set():
             success, frame = cap.read()
 
             if not success:
@@ -96,6 +116,7 @@ def generate_frames(source=0, user_email: str = None):
             )
 
     finally:
+        _is_streaming = False
         cap.release()
         logger.info("[stream] 🛑 Camera released.")
 

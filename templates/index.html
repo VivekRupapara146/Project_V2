@@ -122,6 +122,18 @@
       Search...
     </div>
 
+    <!-- Session download button — hidden until first analysis -->
+    <div id="download-session-btn"
+      onclick="downloadSessionJSON()"
+      data-tooltip="Download session analysis"
+      style="display:none;align-items:center;gap:7px;padding:7px 13px;border-radius:8px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);color:var(--cyan);font-size:12px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all 0.2s;"
+      onmouseover="this.style.background='rgba(0,212,255,0.15)'"
+      onmouseout="this.style.background='rgba(0,212,255,0.08)'">
+      <i class="fa-solid fa-download"></i>
+      Session
+      <span id="dl-count" style="background:rgba(0,212,255,0.2);border-radius:99px;padding:1px 6px;font-size:10px;">0</span>
+    </div>
+
     <div class="header-btn" data-tooltip="Notifications" onclick="navigate('alerts')">
       <i class="fa-solid fa-bell"></i>
       <span class="notif-count">3</span>
@@ -142,32 +154,32 @@
       <!-- Stat cards -->
       <div class="grid-4">
         <div class="glass2 stat-card fade-in d1">
-          <div class="stat-label">Total Vehicles
+          <div class="stat-label">Total Detected
             <div class="stat-icon" style="background:rgba(0,212,255,0.1);"><i class="fa-solid fa-car-burst" style="color:var(--cyan);"></i></div>
           </div>
-          <div class="stat-value" style="color:var(--cyan);" data-counter="689">0</div>
-          <div class="stat-sub"><i class="fa-solid fa-arrow-trend-up trend-up"></i><span style="color:#4ade80;">+12.4%</span>&nbsp;vs yesterday</div>
+          <div class="stat-value" style="color:var(--cyan);" id="stat-total">—</div>
+          <div class="stat-sub" id="stat-total-sub" style="color:var(--text3);">Upload an image to analyze</div>
         </div>
         <div class="glass2 stat-card fade-in d2">
-          <div class="stat-label">Active Zones
-            <div class="stat-icon" style="background:rgba(168,85,247,0.1);"><i class="fa-solid fa-map-location-dot" style="color:var(--purple);"></i></div>
+          <div class="stat-label">Most Common
+            <div class="stat-icon" style="background:rgba(168,85,247,0.1);"><i class="fa-solid fa-trophy" style="color:var(--purple);"></i></div>
           </div>
-          <div class="stat-value" style="color:var(--purple);" data-counter="12">0</div>
-          <div class="stat-sub"><i class="fa-solid fa-arrow-trend-up trend-up"></i><span style="color:#4ade80;">+2</span>&nbsp;new zones</div>
+          <div class="stat-value" style="color:var(--purple);font-size:20px;" id="stat-top-class">—</div>
+          <div class="stat-sub" id="stat-top-count" style="color:var(--text3);">Top detected class</div>
         </div>
         <div class="glass2 stat-card fade-in d3">
-          <div class="stat-label">Alerts Today
-            <div class="stat-icon" style="background:rgba(239,68,68,0.1);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--red);"></i></div>
+          <div class="stat-label">Classes Found
+            <div class="stat-icon" style="background:rgba(239,68,68,0.1);"><i class="fa-solid fa-tags" style="color:var(--red);"></i></div>
           </div>
-          <div class="stat-value" style="color:var(--red);" data-counter="7">0</div>
-          <div class="stat-sub"><i class="fa-solid fa-arrow-trend-down" style="color:var(--red);font-size:10px;"></i><span style="color:var(--red);">+3</span>&nbsp;since morning</div>
+          <div class="stat-value" style="color:var(--red);" id="stat-classes">—</div>
+          <div class="stat-sub" id="stat-classes-sub" style="color:var(--text3);">Distinct object types</div>
         </div>
         <div class="glass2 stat-card fade-in d4">
-          <div class="stat-label">Avg Speed (km/h)
+          <div class="stat-label">Avg Confidence
             <div class="stat-icon" style="background:rgba(34,197,94,0.1);"><i class="fa-solid fa-gauge-high" style="color:var(--green);"></i></div>
           </div>
-          <div class="stat-value" style="color:var(--green);" data-counter="48">0</div>
-          <div class="stat-sub"><i class="fa-solid fa-minus" style="color:var(--text3);font-size:10px;"></i>&nbsp;within normal range</div>
+          <div class="stat-value" style="color:var(--green);" id="stat-conf">—</div>
+          <div class="stat-sub" id="stat-conf-sub" style="color:var(--text3);">Across all detections</div>
         </div>
       </div>
 
@@ -228,76 +240,33 @@
           </div>
 
           <div class="det-grid" id="det-grid" style="display:none;">
-            <div class="det-row">
-              <i class="fa-solid fa-car" style="color:var(--cyan);"></i>
-              <span class="det-name">Cars</span><span class="det-val" style="color:var(--cyan);">342</span>
-            </div>
-            <div class="det-row">
-              <i class="fa-solid fa-bus" style="color:var(--purple);"></i>
-              <span class="det-name">Buses</span><span class="det-val" style="color:var(--purple);">56</span>
-            </div>
-            <div class="det-row">
-              <i class="fa-solid fa-truck" style="color:var(--amber);"></i>
-              <span class="det-name">Trucks</span><span class="det-val" style="color:var(--amber);">89</span>
-            </div>
-            <div class="det-row">
-              <i class="fa-solid fa-person-walking" style="color:var(--green);"></i>
-              <span class="det-name">Persons</span><span class="det-val" style="color:var(--green);">128</span>
-            </div>
+            <!-- Populated dynamically by upload.js after real detection -->
           </div>
         </div>
       </div>
 
-      <!-- Vehicle breakdown -->
-      <div class="glass" style="padding:22px;">
+      <!-- Vehicle breakdown — populated dynamically after analysis -->
+      <div class="glass" style="padding:22px;" id="breakdown-card">
         <div class="card-title"><i class="fa-solid fa-chart-pie" style="color:var(--cyan);"></i> Vehicle Detection Breakdown</div>
-        <div class="veh-cards">
-          <div class="veh-card">
-            <div class="veh-icon" style="background:rgba(0,212,255,0.12);border:1px solid rgba(0,212,255,0.2);"><i class="fa-solid fa-car" style="color:var(--cyan);"></i></div>
-            <div class="veh-count" style="color:var(--cyan);" data-counter="342">0</div>
-            <div class="veh-name">Cars</div>
-            <div class="veh-bar"><div class="veh-bar-fill" style="width:49.6%;background:linear-gradient(90deg,var(--cyan),rgba(0,212,255,0.5));box-shadow:0 0 6px rgba(0,212,255,0.4);"></div></div>
-            <div class="veh-pct">49.6%</div>
-          </div>
-          <div class="veh-card">
-            <div class="veh-icon" style="background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.2);"><i class="fa-solid fa-bus" style="color:var(--purple);"></i></div>
-            <div class="veh-count" style="color:var(--purple);" data-counter="56">0</div>
-            <div class="veh-name">Buses</div>
-            <div class="veh-bar"><div class="veh-bar-fill" style="width:8.1%;background:linear-gradient(90deg,var(--purple),rgba(168,85,247,0.5));box-shadow:0 0 6px rgba(168,85,247,0.4);"></div></div>
-            <div class="veh-pct">8.1%</div>
-          </div>
-          <div class="veh-card">
-            <div class="veh-icon" style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.2);"><i class="fa-solid fa-truck" style="color:var(--amber);"></i></div>
-            <div class="veh-count" style="color:var(--amber);" data-counter="89">0</div>
-            <div class="veh-name">Trucks</div>
-            <div class="veh-bar"><div class="veh-bar-fill" style="width:12.9%;background:linear-gradient(90deg,var(--amber),rgba(245,158,11,0.5));box-shadow:0 0 6px rgba(245,158,11,0.4);"></div></div>
-            <div class="veh-pct">12.9%</div>
-          </div>
-          <div class="veh-card">
-            <div class="veh-icon" style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.2);"><i class="fa-solid fa-person-walking" style="color:var(--green);"></i></div>
-            <div class="veh-count" style="color:var(--green);" data-counter="128">0</div>
-            <div class="veh-name">Persons</div>
-            <div class="veh-bar"><div class="veh-bar-fill" style="width:18.6%;background:linear-gradient(90deg,var(--green),rgba(34,197,94,0.5));box-shadow:0 0 6px rgba(34,197,94,0.4);"></div></div>
-            <div class="veh-pct">18.6%</div>
-          </div>
-          <div class="veh-card">
-            <div class="veh-icon" style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.2);"><i class="fa-solid fa-motorcycle" style="color:var(--red);"></i></div>
-            <div class="veh-count" style="color:var(--red);" data-counter="74">0</div>
-            <div class="veh-name">Motorcycles</div>
-            <div class="veh-bar"><div class="veh-bar-fill" style="width:10.7%;background:linear-gradient(90deg,var(--red),rgba(239,68,68,0.5));box-shadow:0 0 6px rgba(239,68,68,0.4);"></div></div>
-            <div class="veh-pct">10.7%</div>
-          </div>
+
+        <!-- Empty state — shown before any analysis -->
+        <div id="breakdown-empty" style="text-align:center;padding:32px 0;color:var(--text3);font-size:12px;">
+          <i class="fa-solid fa-chart-pie" style="font-size:28px;opacity:0.2;display:block;margin-bottom:10px;"></i>
+          Upload and analyze an image or video to see detection breakdown
         </div>
+
+        <!-- Populated by upload.js after real analysis -->
+        <div class="veh-cards" id="veh-cards" style="display:none;"></div>
       </div>
 
       <!-- Charts -->
       <div class="grid-2">
         <div class="glass" style="padding:22px;">
-          <div class="card-title"><i class="fa-solid fa-chart-bar" style="color:var(--cyan);"></i> Vehicle Distribution (Hourly)</div>
+          <div class="card-title"><i class="fa-solid fa-chart-bar" style="color:var(--cyan);"></i> Detections by Class (per Analysis)</div>
           <div class="chart-wrap"><canvas id="barChart"></canvas></div>
         </div>
         <div class="glass" style="padding:22px;">
-          <div class="card-title"><i class="fa-solid fa-chart-line" style="color:var(--purple);"></i> Traffic Flow (Weekly)</div>
+          <div class="card-title"><i class="fa-solid fa-chart-line" style="color:var(--purple);"></i> Session Detection Trend</div>
           <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
         </div>
       </div>
@@ -357,17 +326,17 @@
       </div>
 
       <div class="glass" style="padding:22px;">
-        <div class="card-title"><i class="fa-solid fa-chart-area" style="color:var(--cyan);"></i> 24h Traffic by Direction</div>
+        <div class="card-title"><i class="fa-solid fa-chart-area" style="color:var(--cyan);"></i> Cumulative Detections (Session Timeline)</div>
         <div class="chart-wrap"><canvas id="areaChart"></canvas></div>
       </div>
 
       <div class="grid-2">
         <div class="glass" style="padding:22px;">
-          <div class="card-title"><i class="fa-solid fa-chart-bar" style="color:var(--purple);"></i> Peak vs Off-Peak (Weekly)</div>
+          <div class="card-title"><i class="fa-solid fa-chart-bar" style="color:var(--purple);"></i> Detections per Analysis</div>
           <div class="chart-wrap"><canvas id="peakChart"></canvas></div>
         </div>
         <div class="glass" style="padding:22px;">
-          <div class="card-title"><i class="fa-solid fa-chart-pie" style="color:var(--amber);"></i> Vehicle Mix</div>
+          <div class="card-title"><i class="fa-solid fa-chart-pie" style="color:var(--amber);"></i> Vehicle Mix (Session Total)</div>
           <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
         </div>
       </div>

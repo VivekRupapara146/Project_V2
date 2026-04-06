@@ -19,7 +19,7 @@ from flask_cors import CORS
 
 from utils.detector   import load_model, detect
 from utils.visualizer import draw_boxes
-from utils.stream     import generate_frames, process_video_upload, allowed_video
+from utils.stream     import generate_frames, process_video_upload, allowed_video, request_stop, clear_stop, is_streaming
 from utils.database   import (
     connect as db_connect,
     get_recent_detections,
@@ -290,6 +290,28 @@ def video_feed():
         generate_frames(source, user_email=user_email),
         mimetype="multipart/x-mixed-replace; boundary=frame"
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Route: POST /stop_feed — stop the active webcam stream
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/stop_feed")
+def stop_feed():
+    """
+    Signal the active MJPEG stream to stop at the next frame boundary.
+    The camera is released inside generate_frames() finally block.
+    """
+    request_stop()
+    return jsonify({"message": "Stream stop requested."})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Route: GET /stream_status — check if stream is active
+# ─────────────────────────────────────────────────────────────────────────────
+@app.get("/stream_status")
+def stream_status():
+    """Return whether the webcam stream is currently active."""
+    return jsonify({"streaming": is_streaming()})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

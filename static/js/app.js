@@ -32,6 +32,10 @@ const Auth = {
 
   logout() {
     this.removeToken();
+    // Clear session analysis history so next login starts fresh
+    window._sessionHistory = [];
+    // Reset charts back to empty state
+    if (typeof resetCharts === 'function') resetCharts();
     showLoginModal();
   }
 };
@@ -261,9 +265,5 @@ document.addEventListener('DOMContentLoaded', () => {
     showLoginModal();
   } else {
     onAuthSuccess();
-    // Animate dashboard counters
-    document.querySelectorAll('[data-counter]').forEach(el => {
-      animateCounter(el, parseInt(el.dataset.counter), 1400);
-    });
   }
 });
