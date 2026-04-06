@@ -155,16 +155,27 @@ async function handleRegister(e) {
 }
 
 /* ═══════════════════════════════════════════════════
+   USER MENU DROPDOWN
+═══════════════════════════════════════════════════ */
+function toggleUserMenu() {
+  const menu = document.getElementById('user-menu');
+  if (!menu) return;
+  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+}
+
+/* ═══════════════════════════════════════════════════
    POST-LOGIN INIT
 ═══════════════════════════════════════════════════ */
 function onAuthSuccess() {
   const user = Auth.getUser();
   if (user) {
-    document.getElementById('avatar-label').textContent = user.split('@')[0];
+    // Show email in the user dropdown
+    const emailEl = document.getElementById('user-menu-email');
+    if (emailEl) emailEl.textContent = user;
   }
   // Start metrics polling
   startMetricsPoll();
-  // Init dashboard charts with real data
+  // Init dashboard charts with empty state
   initDashboardCharts();
 }
 
@@ -255,6 +266,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Overlay tap closes sidebar
   document.getElementById('overlay').addEventListener('click', closeSidebar);
+
+  // Click outside user menu → close it
+  document.addEventListener('click', (e) => {
+    const avatar = document.getElementById('user-avatar');
+    const menu   = document.getElementById('user-menu');
+    if (!menu || !avatar) return;
+    if (!avatar.contains(e.target) && !menu.contains(e.target)) {
+      menu.style.display = 'none';
+    }
+  });
 
   // Login / register form handlers
   document.getElementById('login-form').addEventListener('submit', handleLogin);

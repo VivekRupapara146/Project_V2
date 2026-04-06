@@ -678,11 +678,17 @@ input[type="range"]::-webkit-slider-thumb {
   white-space: nowrap; pointer-events: none;
   opacity: 0; visibility: hidden;
   transition: opacity 0.18s ease;
-  z-index: 200;
+  z-index: 9999;
   box-shadow: 0 4px 12px rgba(0,0,0,0.4);
   font-family: var(--font);
 }
 [data-tooltip]:hover::after { opacity: 1; visibility: visible; }
+
+/* Header tooltips appear BELOW — prevents clipping off the top of the viewport */
+#header [data-tooltip]::after {
+  bottom: auto;
+  top: calc(100% + 7px);
+}
 
 /* ═══════════════════════════════════════════════════
    ANIMATIONS
