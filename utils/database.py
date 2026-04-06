@@ -24,7 +24,7 @@ from pymongo.errors import ConnectionFailure, OperationFailure
 logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-MONGO_URI         = os.getenv("MONGO_URI", "mongodb+srv://vivekrupaparag_db_user:qSIOQy1VfdxgbXXy@cluster0.24idgza.mongodb.net/?appName=Cluster0")
+MONGO_URI         = os.getenv("MONGO_URI", "mongodb+srv://db_user:pass@cluster0.24idgza.mongodb.net/?appName=Cluster0")
 DB_NAME           = os.getenv("DB_NAME",   "traffic_detection")
 COLLECTION_FRAMES = "frames"
 COLLECTION_USERS  = "users"
