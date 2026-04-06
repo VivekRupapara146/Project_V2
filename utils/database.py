@@ -24,7 +24,7 @@ from pymongo.errors import ConnectionFailure, OperationFailure
 logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-MONGO_URI         = os.getenv("MONGO_URI", "mongodb+srv://vivekrupaparag_db_user:yg0io87vC1Hul1DE@cluster0.24idgza.mongodb.net/?appName=Cluster0")
+MONGO_URI         = os.getenv("MONGO_URI", "mongodb+srv://vivekrupaparag_db_user:qSIOQy1VfdxgbXXy@cluster0.24idgza.mongodb.net/?appName=Cluster0")
 DB_NAME           = os.getenv("DB_NAME",   "traffic_detection")
 COLLECTION_FRAMES = "frames"
 COLLECTION_USERS  = "users"
@@ -171,23 +171,36 @@ def _write_loop():
 # Write Strategy
 # ─────────────────────────────────────────────────────────────────────────────
 
-def should_save(detections: list[dict]) -> bool:
+def should_save(detections: list[dict], source: str = "video") -> bool:
     global _frame_counter
+
+    # Images are single intentional uploads — ALWAYS save them,
+    # bypassing the every-N-frames counter entirely.
+    if source == "image":
+        if not detections:
+            return False
+        return any(d.get("conf", 0) >= MIN_CONFIDENCE_TO_SAVE for d in detections)
+
+    # Video frames: apply every-N-frames + confidence filter
     with _counter_lock:
         _frame_counter += 1
         save_by_count = (_frame_counter % SAVE_EVERY_N_FRAMES == 0)
+
     if not save_by_count or not detections:
         return False
     return any(d.get("conf", 0) >= MIN_CONFIDENCE_TO_SAVE for d in detections)
 
 
-def save_frame(detections: list[dict], source: str = "video") -> bool:
-    if not is_connected() or not should_save(detections):
+def save_frame(detections: list[dict],
+               source: str = "video",
+               user_email: str = None) -> bool:
+    if not is_connected() or not should_save(detections, source):
         return False
     doc = {
         "timestamp":     datetime.now(timezone.utc),
         "source":        source,
         "total_objects": len(detections),
+        "user_email":    user_email,      # None if called from video stream
         "detections": [
             {"label": d["label"], "confidence": d["conf"], "bbox": d["bbox"]}
             for d in detections

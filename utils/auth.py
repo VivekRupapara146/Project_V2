@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # ── Configuration ─────────────────────────────────────────────────────────────
 # CRITICAL: Set a strong secret in production via environment variable.
 # Never hardcode this in source code.
-JWT_SECRET      = os.getenv("JWT_SECRET", "change-this-secret-in-production")
+JWT_SECRET      = os.getenv("JWT_SECRET", "47cadcc8b6588f1df52103f709db820bc21a6a5d63da6b0510c6e5e28a7f159b")
 JWT_ALGORITHM   = "HS256"
 JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "24"))
 

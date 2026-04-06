@@ -41,14 +41,17 @@ def get_model():
     return _model
 
 
-def detect(image: np.ndarray, source: str = "video") -> list[dict]:
+def detect(image: np.ndarray,
+           source: str = "video",
+           user_email: str = None) -> list[dict]:
     """
     Run YOLOv8 inference on a single BGR image.
     Records latency/FPS via metrics and saves to DB asynchronously.
 
     Args:
-        image  (np.ndarray): BGR frame from OpenCV.
-        source (str):        "video" | "image"
+        image      (np.ndarray): BGR frame from OpenCV.
+        source     (str):        "video" | "image"
+        user_email (str):        Logged-in user's email (None for video stream).
 
     Returns:
         list[dict]: Detections with label, conf, bbox.
@@ -91,7 +94,7 @@ def detect(image: np.ndarray, source: str = "video") -> list[dict]:
     # ── Non-blocking DB write ─────────────────────────────────────────────────
     try:
         from utils.database import save_frame
-        save_frame(detections, source=source)
+        save_frame(detections, source=source, user_email=user_email)
     except Exception as e:
         from utils.metrics import record_error
         record_error("db_write")

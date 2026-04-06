@@ -14,11 +14,12 @@ import logging
 
 import cv2
 import numpy as np
-from flask import Flask, request, jsonify, Response, render_template_string
+from flask import Flask, request, jsonify, Response, render_template, g
+from flask_cors import CORS
 
 from utils.detector   import load_model, detect
 from utils.visualizer import draw_boxes
-from utils.stream     import generate_frames
+from utils.stream     import generate_frames, process_video_upload, allowed_video
 from utils.database   import (
     connect as db_connect,
     get_recent_detections,
@@ -51,7 +52,9 @@ logger = logging.getLogger(__name__)
 
 # ── App init ──────────────────────────────────────────────────────────────────
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024   # 500 MB (video uploads)
+
+CORS(app)   # Allow cross-origin requests (needed for local frontend dev)
 
 limiter.init_app(app)
 app.register_error_handler(429, rate_limit_error_handler)
@@ -69,100 +72,11 @@ def allowed_file(filename: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Route: /  — Status dashboard
+# Route: /  — Serve frontend dashboard
 # ─────────────────────────────────────────────────────────────────────────────
-INDEX_HTML = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Traffic Detection API</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Courier New', monospace;
-      background: #0d0d0d; color: #e0e0e0;
-      display: flex; align-items: center; justify-content: center;
-      min-height: 100vh; padding: 2rem;
-    }
-    .card {
-      border: 1px solid #2a2a2a; border-radius: 8px;
-      padding: 2.5rem; max-width: 600px; width: 100%;
-      background: #111;
-    }
-    h1 { color: #00d4ff; font-size: 1.4rem; margin-bottom: .5rem; }
-    .badge {
-      display: inline-block; background: #00d4ff22; color: #00d4ff;
-      border: 1px solid #00d4ff44; padding: .2rem .7rem;
-      border-radius: 99px; font-size: .75rem; margin-bottom: 2rem;
-    }
-    h2 { font-size: .9rem; color: #888; text-transform: uppercase;
-         letter-spacing: .1em; margin: 1.5rem 0 .75rem; }
-    .endpoint {
-      background: #1a1a1a; border-radius: 6px;
-      padding: .85rem 1rem; margin-bottom: .5rem;
-      display: flex; align-items: center; gap: .75rem;
-    }
-    .method {
-      font-size: .7rem; font-weight: bold; padding: .2rem .5rem;
-      border-radius: 4px; flex-shrink: 0;
-    }
-    .get  { background: #0a3; color: #fff; }
-    .post { background: #a50; color: #fff; }
-    .path { color: #e0e0e0; font-size: .9rem; }
-    .desc { color: #666; font-size: .8rem; }
-    a { color: #00d4ff; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>🚦 Traffic Detection API</h1>
-    <span class="badge">● online</span>
-
-    <h2>Endpoints</h2>
-
-    <div class="endpoint">
-      <span class="method get">GET</span>
-      <div>
-        <div class="path">/</div>
-        <div class="desc">This status page</div>
-      </div>
-    </div>
-
-    <div class="endpoint">
-      <span class="method post">POST</span>
-      <div>
-        <div class="path">/predict</div>
-        <div class="desc">Upload an image → receive JSON detections</div>
-      </div>
-    </div>
-
-    <div class="endpoint">
-      <span class="method get">GET</span>
-      <div>
-        <div class="path"><a href="/video_feed">/video_feed</a></div>
-        <div class="desc">Live annotated webcam stream (MJPEG)</div>
-      </div>
-    </div>
-
-    <h2>Model Classes</h2>
-    <div class="endpoint">
-      <span style="color:#aaa;font-size:.85rem">
-        person &nbsp;·&nbsp; bicycle &nbsp;·&nbsp; car &nbsp;·&nbsp;
-        bus &nbsp;·&nbsp; motorbike
-      </span>
-    </div>
-  </div>
-</body>
-</html>
-"""
-
-
 @app.get("/")
 def index():
-    return render_template_string(INDEX_HTML)
+    return render_template("index.html")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -222,7 +136,7 @@ def predict():
 
     # ── Run detection ─────────────────────────────────────────────────────────
     try:
-        detections = detect(image)
+        detections = detect(image, source="image", user_email=g.current_user)
     except Exception as e:
         logger.error(f"[/predict] Detection error: {e}")
         return jsonify({"error": "Inference failed. Please try again."}), 500
@@ -352,22 +266,115 @@ def analytics_peak_time():
 @app.get("/video_feed")
 def video_feed():
     """
-    Streams annotated webcam frames as MJPEG.
+    Streams annotated webcam/video frames as MJPEG.
     Open in browser or embed in an <img> tag:
         <img src="/video_feed">
     """
     source = request.args.get("source", default=0)
 
-    # Allow numeric webcam index via query param: /video_feed?source=1
     try:
         source = int(source)
     except (ValueError, TypeError):
-        pass   # keep as string (file path / URL)
+        pass
+
+    # Optional auth — video feed is public but passes user if token present
+    user_email = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        from utils.auth import decode_token
+        payload = decode_token(auth_header.split(" ", 1)[1].strip())
+        if payload:
+            user_email = payload.get("sub")
 
     return Response(
-        generate_frames(source),
+        generate_frames(source, user_email=user_email),
         mimetype="multipart/x-mixed-replace; boundary=frame"
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Route: POST /predict_video — uploaded video file detection
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/predict_video")
+@limiter.limit(PREDICT_LIMIT)
+@require_auth
+def predict_video():
+    """
+    Accept an uploaded video file, run detection on every frame,
+    and return a structured JSON summary.
+
+    Request:
+        multipart/form-data with field: "video"
+        Supported formats: mp4, avi, mov, mkv, webm
+
+    Response 200:
+        {
+            "total_frames":     120,
+            "processed_frames": 34,
+            "summary": { "car": 28, "person": 10, "motorbike": 4 },
+            "detections_by_frame": [
+                {
+                    "frame":       12,
+                    "timestamp_s": 0.48,
+                    "objects": [
+                        { "label": "car", "confidence": 0.91, "bbox": [...] }
+                    ]
+                },
+                ...
+            ]
+        }
+
+    Response 400: invalid/missing file
+    Response 500: processing failure
+    """
+    import tempfile
+
+    # ── Validate request ──────────────────────────────────────────────────────
+    if "video" not in request.files:
+        return jsonify({"error": "No 'video' field in request."}), 400
+
+    file = request.files["video"]
+
+    if file.filename == "":
+        return jsonify({"error": "Empty filename."}), 400
+
+    if not allowed_video(file.filename):
+        record_error("invalid_input")
+        return jsonify({
+            "error": "Unsupported video format. Allowed: mp4, avi, mov, mkv, webm"
+        }), 400
+
+    # ── Save to temp file (OpenCV needs a real file path) ─────────────────────
+    ext      = file.filename.rsplit(".", 1)[1].lower()
+    tmp_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            suffix=f".{ext}", delete=False, dir="/tmp"
+        ) as tmp:
+            file.save(tmp)
+            tmp_path = tmp.name
+
+        logger.info(f"[/predict_video] Saved upload to: {tmp_path}")
+
+        # ── Run detection across all frames ───────────────────────────────────
+        result = process_video_upload(tmp_path, user_email=g.current_user)
+
+        if not result:
+            return jsonify({"error": "Video processing failed."}), 500
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"[/predict_video] Error: {e}")
+        record_error("inference")
+        return jsonify({"error": "Video processing failed. Please try again."}), 500
+
+    finally:
+        # ── Always clean up the temp file ─────────────────────────────────────
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+            logger.info(f"[/predict_video] Temp file cleaned up: {tmp_path}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

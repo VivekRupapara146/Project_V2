@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TrafficSense AI – Traffic Monitoring Dashboard</title>
+
+  <!-- CDN Dependencies -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="/static/css/main.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+  SIDEBAR
+═══════════════════════════════════════ -->
+<aside id="sidebar">
+  <div class="logo-area">
+    <div class="logo-icon"><i class="fa-solid fa-traffic-light"></i></div>
+    <div>
+      <div class="logo-title">TrafficSense AI</div>
+      <div class="logo-ver">v2.4.1</div>
+    </div>
+  </div>
+
+  <nav>
+    <div class="nav-section-label">Main</div>
+    <button class="nav-item active" data-page="dashboard">
+      <i class="fa-solid fa-gauge icon"></i>
+      <span class="label">Dashboard</span>
+    </button>
+    <button class="nav-item" data-page="live">
+      <i class="fa-solid fa-circle-dot icon"></i>
+      <span class="label">Live Feed</span>
+      <span class="nav-badge">5</span>
+    </button>
+    <button class="nav-item" data-page="analytics">
+      <i class="fa-solid fa-chart-line icon"></i>
+      <span class="label">Analytics</span>
+    </button>
+    <button class="nav-item" data-page="reports">
+      <i class="fa-solid fa-file-lines icon"></i>
+      <span class="label">Reports</span>
+    </button>
+    <button class="nav-item" data-page="zones">
+      <i class="fa-solid fa-map-location-dot icon"></i>
+      <span class="label">Zones</span>
+    </button>
+
+    <div class="nav-section-label">System</div>
+    <button class="nav-item" data-page="alerts">
+      <i class="fa-solid fa-bell icon"></i>
+      <span class="label">Alerts</span>
+      <span class="nav-badge">3</span>
+    </button>
+    <button class="nav-item" data-page="settings">
+      <i class="fa-solid fa-gear icon"></i>
+      <span class="label">Settings</span>
+    </button>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="sys-card">
+      <div class="sys-row">
+        <span class="sys-key">AI Model</span>
+        <span class="sys-val green">YOLOv8</span>
+      </div>
+      <div class="sys-row">
+        <span class="sys-key">Inference</span>
+        <span class="sys-val" id="sys-latency">— ms</span>
+      </div>
+      <div class="sys-row" style="margin-bottom:4px;">
+        <span class="sys-key">FPS</span>
+        <span class="sys-val" id="sys-fps">—</span>
+      </div>
+      <div class="sys-bar"><div class="sys-bar-fill" id="sys-bar-fill" style="width:0%;"></div></div>
+      <div class="sys-row">
+        <span class="sys-key">Database</span>
+        <span class="sys-val" id="sys-db" style="color:#64748b;">—</span>
+      </div>
+      <div class="sys-row">
+        <span class="sys-key">Uptime</span>
+        <span class="sys-val" id="sys-uptime" style="color:#94a3b8;">—</span>
+      </div>
+    </div>
+    <button onclick="Auth.logout()" style="width:100%;margin-top:10px;padding:8px;border-radius:8px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.18);color:#ef4444;font-size:11px;font-family:var(--font);cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.15)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
+      <i class="fa-solid fa-right-from-bracket"></i> Sign Out
+    </button>
+  </div>
+</aside>
+
+<div id="overlay"></div>
+
+<!-- ═══════════════════════════════════════
+  MAIN APP
+═══════════════════════════════════════ -->
+<div id="app">
+
+  <!-- HEADER -->
+  <header id="header">
+    <button id="mobile-toggle" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></button>
+
+    <div class="header-title">
+      <h1 id="page-title">Traffic Monitoring Dashboard</h1>
+      <div class="status">
+        <div class="status-dot"></div>
+        <span class="status-label">Online</span>
+        <span class="status-sep">·</span>
+        <span class="live-tag">Live</span>
+      </div>
+    </div>
+
+    <div class="header-spacer"></div>
+
+    <div class="header-search" data-tooltip="Search zones, cameras...">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      Search...
+    </div>
+
+    <div class="header-btn" data-tooltip="Notifications" onclick="navigate('alerts')">
+      <i class="fa-solid fa-bell"></i>
+      <span class="notif-count">3</span>
+    </div>
+
+    <div class="avatar" data-tooltip="Signed in user">
+      <i class="fa-solid fa-user"></i>
+      <span id="avatar-label" style="display:none;"></span>
+    </div>
+  </header>
+
+  <!-- PAGES -->
+  <main>
+
+    <!-- ═══════ DASHBOARD PAGE ═══════ -->
+    <section id="page-dashboard" class="page active">
+
+      <!-- Stat cards -->
+      <div class="grid-4">
+        <div class="glass2 stat-card fade-in d1">
+          <div class="stat-label">Total Vehicles
+            <div class="stat-icon" style="background:rgba(0,212,255,0.1);"><i class="fa-solid fa-car-burst" style="color:var(--cyan);"></i></div>
+          </div>
+          <div class="stat-value" style="color:var(--cyan);" data-counter="689">0</div>
+          <div class="stat-sub"><i class="fa-solid fa-arrow-trend-up trend-up"></i><span style="color:#4ade80;">+12.4%</span>&nbsp;vs yesterday</div>
+        </div>
+        <div class="glass2 stat-card fade-in d2">
+          <div class="stat-label">Active Zones
+            <div class="stat-icon" style="background:rgba(168,85,247,0.1);"><i class="fa-solid fa-map-location-dot" style="color:var(--purple);"></i></div>
+          </div>
+          <div class="stat-value" style="color:var(--purple);" data-counter="12">0</div>
+          <div class="stat-sub"><i class="fa-solid fa-arrow-trend-up trend-up"></i><span style="color:#4ade80;">+2</span>&nbsp;new zones</div>
+        </div>
+        <div class="glass2 stat-card fade-in d3">
+          <div class="stat-label">Alerts Today
+            <div class="stat-icon" style="background:rgba(239,68,68,0.1);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--red);"></i></div>
+          </div>
+          <div class="stat-value" style="color:var(--red);" data-counter="7">0</div>
+          <div class="stat-sub"><i class="fa-solid fa-arrow-trend-down" style="color:var(--red);font-size:10px;"></i><span style="color:var(--red);">+3</span>&nbsp;since morning</div>
+        </div>
+        <div class="glass2 stat-card fade-in d4">
+          <div class="stat-label">Avg Speed (km/h)
+            <div class="stat-icon" style="background:rgba(34,197,94,0.1);"><i class="fa-solid fa-gauge-high" style="color:var(--green);"></i></div>
+          </div>
+          <div class="stat-value" style="color:var(--green);" data-counter="48">0</div>
+          <div class="stat-sub"><i class="fa-solid fa-minus" style="color:var(--text3);font-size:10px;"></i>&nbsp;within normal range</div>
+        </div>
+      </div>
+
+      <!-- Upload + Result -->
+      <div class="grid-2">
+        <!-- Upload -->
+        <div class="glass" style="padding:22px;" id="upload-card">
+          <div class="card-title"><i class="fa-solid fa-cloud-arrow-up" style="color:var(--cyan);"></i> Upload &amp; Analyze</div>
+
+          <div class="upload-zone" id="upload-zone">
+            <i class="fa-solid fa-file-image"></i>
+            <p>Drag &amp; drop an image or video</p>
+            <span>Supports JPG, PNG, MP4, AVI</span>
+            <div class="upload-file-name" id="upload-fname"><i class="fa-solid fa-check"></i> <span id="fname-text"></span></div>
+            <input type="file" id="file-input" accept="image/*,video/*" style="display:none;" />
+          </div>
+
+          <div class="progress-wrap" id="progress-wrap">
+            <div class="progress-header">
+              <span id="progress-label">Analyzing with YOLOv8...</span>
+              <span class="progress-pct" id="progress-pct">0%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            <div class="analyzing-info">
+              <div class="spinner"></div>
+              <span>Running AI detection model...</span>
+            </div>
+          </div>
+
+          <button class="btn btn-grad" id="analyze-btn" style="width:100%;" disabled onclick="startAnalysis()">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze
+          </button>
+        </div>
+
+        <!-- Result -->
+        <div class="glass" style="padding:22px;">
+          <div class="card-title"><i class="fa-solid fa-image" style="color:var(--purple);"></i> Detection Results</div>
+
+          <div class="result-placeholder" id="result-placeholder">
+            <i class="fa-solid fa-photo-film"></i>
+            Upload an image to see preview
+          </div>
+
+          <div class="result-img-wrap" id="result-img-wrap">
+            <img id="result-img" src="" alt="Detection result" />
+            <!-- Real bounding boxes injected here by upload.js -->
+            <div id="bbox-container" style="position:absolute;inset:0;pointer-events:none;"></div>
+            <div class="scan-overlay" id="scan-overlay" style="display:none;">
+              <div class="scan-line"></div>
+            </div>
+            <div class="result-overlay-tl" id="res-tl" style="display:none;">
+              <div class="status-dot"></div><span style="color:#22c55e;font-size:10px;font-weight:600;">Detection Complete</span>
+            </div>
+            <div class="result-overlay-tr" id="res-tr" style="display:none;">689 objects</div>
+            <div class="result-overlay-bl">
+              <div class="status-dot" style="display:inline-block;"></div>
+            </div>
+          </div>
+
+          <div class="det-grid" id="det-grid" style="display:none;">
+            <div class="det-row">
+              <i class="fa-solid fa-car" style="color:var(--cyan);"></i>
+              <span class="det-name">Cars</span><span class="det-val" style="color:var(--cyan);">342</span>
+            </div>
+            <div class="det-row">
+              <i class="fa-solid fa-bus" style="color:var(--purple);"></i>
+              <span class="det-name">Buses</span><span class="det-val" style="color:var(--purple);">56</span>
+            </div>
+            <div class="det-row">
+              <i class="fa-solid fa-truck" style="color:var(--amber);"></i>
+              <span class="det-name">Trucks</span><span class="det-val" style="color:var(--amber);">89</span>
+            </div>
+            <div class="det-row">
+              <i class="fa-solid fa-person-walking" style="color:var(--green);"></i>
+              <span class="det-name">Persons</span><span class="det-val" style="color:var(--green);">128</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vehicle breakdown -->
+      <div class="glass" style="padding:22px;">
+        <div class="card-title"><i class="fa-solid fa-chart-pie" style="color:var(--cyan);"></i> Vehicle Detection Breakdown</div>
+        <div class="veh-cards">
+          <div class="veh-card">
+            <div class="veh-icon" style="background:rgba(0,212,255,0.12);border:1px solid rgba(0,212,255,0.2);"><i class="fa-solid fa-car" style="color:var(--cyan);"></i></div>
+            <div class="veh-count" style="color:var(--cyan);" data-counter="342">0</div>
+            <div class="veh-name">Cars</div>
+            <div class="veh-bar"><div class="veh-bar-fill" style="width:49.6%;background:linear-gradient(90deg,var(--cyan),rgba(0,212,255,0.5));box-shadow:0 0 6px rgba(0,212,255,0.4);"></div></div>
+            <div class="veh-pct">49.6%</div>
+          </div>
+          <div class="veh-card">
+            <div class="veh-icon" style="background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.2);"><i class="fa-solid fa-bus" style="color:var(--purple);"></i></div>
+            <div class="veh-count" style="color:var(--purple);" data-counter="56">0</div>
+            <div class="veh-name">Buses</div>
+            <div class="veh-bar"><div class="veh-bar-fill" style="width:8.1%;background:linear-gradient(90deg,var(--purple),rgba(168,85,247,0.5));box-shadow:0 0 6px rgba(168,85,247,0.4);"></div></div>
+            <div class="veh-pct">8.1%</div>
+          </div>
+          <div class="veh-card">
+            <div class="veh-icon" style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.2);"><i class="fa-solid fa-truck" style="color:var(--amber);"></i></div>
+            <div class="veh-count" style="color:var(--amber);" data-counter="89">0</div>
+            <div class="veh-name">Trucks</div>
+            <div class="veh-bar"><div class="veh-bar-fill" style="width:12.9%;background:linear-gradient(90deg,var(--amber),rgba(245,158,11,0.5));box-shadow:0 0 6px rgba(245,158,11,0.4);"></div></div>
+            <div class="veh-pct">12.9%</div>
+          </div>
+          <div class="veh-card">
+            <div class="veh-icon" style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.2);"><i class="fa-solid fa-person-walking" style="color:var(--green);"></i></div>
+            <div class="veh-count" style="color:var(--green);" data-counter="128">0</div>
+            <div class="veh-name">Persons</div>
+            <div class="veh-bar"><div class="veh-bar-fill" style="width:18.6%;background:linear-gradient(90deg,var(--green),rgba(34,197,94,0.5));box-shadow:0 0 6px rgba(34,197,94,0.4);"></div></div>
+            <div class="veh-pct">18.6%</div>
+          </div>
+          <div class="veh-card">
+            <div class="veh-icon" style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.2);"><i class="fa-solid fa-motorcycle" style="color:var(--red);"></i></div>
+            <div class="veh-count" style="color:var(--red);" data-counter="74">0</div>
+            <div class="veh-name">Motorcycles</div>
+            <div class="veh-bar"><div class="veh-bar-fill" style="width:10.7%;background:linear-gradient(90deg,var(--red),rgba(239,68,68,0.5));box-shadow:0 0 6px rgba(239,68,68,0.4);"></div></div>
+            <div class="veh-pct">10.7%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="grid-2">
+        <div class="glass" style="padding:22px;">
+          <div class="card-title"><i class="fa-solid fa-chart-bar" style="color:var(--cyan);"></i> Vehicle Distribution (Hourly)</div>
+          <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+        </div>
+        <div class="glass" style="padding:22px;">
+          <div class="card-title"><i class="fa-solid fa-chart-line" style="color:var(--purple);"></i> Traffic Flow (Weekly)</div>
+          <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════ LIVE FEED PAGE ═══════ -->
+    <section id="page-live" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div>
+          <h2 style="font-size:16px;font-weight:600;color:var(--text);">Live Camera Feed</h2>
+          <p style="font-size:11px;color:var(--text3);margin-top:3px;">Real-time vehicle detection across all zones</p>
+        </div>
+        <div class="glass" style="padding:8px 14px;display:flex;align-items:center;gap:8px;">
+          <div class="status-dot"></div>
+          <span style="font-size:12px;color:var(--green);font-weight:500;">5/6 Cameras Active</span>
+        </div>
+      </div>
+      <div class="feed-grid" id="feed-grid"></div>
+    </section>
+
+    <!-- ═══════ ANALYTICS PAGE ═══════ -->
+    <section id="page-analytics" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div>
+          <h2 style="font-size:16px;font-weight:600;">Traffic Analytics</h2>
+          <p style="font-size:11px;color:var(--text3);margin-top:3px;">Deep insights across all monitored zones</p>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-grad"  style="padding:6px 14px;font-size:12px;">24h</button>
+          <button class="btn btn-ghost" style="padding:6px 14px;font-size:12px;">7d</button>
+          <button class="btn btn-ghost" style="padding:6px 14px;font-size:12px;">30d</button>
+          <button class="btn btn-ghost" style="padding:6px 14px;font-size:12px;">90d</button>
+        </div>
+      </div>
+
+      <div class="grid-4">
+        <div class="glass2 stat-card">
+          <div class="stat-label">Avg Congestion <div class="stat-icon" style="background:rgba(34,197,94,0.1);"><i class="fa-solid fa-traffic-light" style="color:var(--green);"></i></div></div>
+          <div class="stat-value" style="color:var(--green);">34%</div>
+          <div class="stat-sub" style="color:var(--green);">-5% from last week</div>
+        </div>
+        <div class="glass2 stat-card">
+          <div class="stat-label">Peak Hour Traffic <div class="stat-icon" style="background:rgba(0,212,255,0.1);"><i class="fa-solid fa-chart-area" style="color:var(--cyan);"></i></div></div>
+          <div class="stat-value" style="color:var(--cyan);">855</div>
+          <div class="stat-sub">Fri 08:00–09:00</div>
+        </div>
+        <div class="glass2 stat-card">
+          <div class="stat-label">Incidents Detected <div class="stat-icon" style="background:rgba(239,68,68,0.1);"><i class="fa-solid fa-car-crash" style="color:var(--red);"></i></div></div>
+          <div class="stat-value" style="color:var(--red);">3</div>
+          <div class="stat-sub">Today</div>
+        </div>
+        <div class="glass2 stat-card">
+          <div class="stat-label">Avg Journey Time <div class="stat-icon" style="background:rgba(168,85,247,0.1);"><i class="fa-solid fa-clock" style="color:var(--purple);"></i></div></div>
+          <div class="stat-value" style="color:var(--purple);">18m</div>
+          <div class="stat-sub">+2m vs baseline</div>
+        </div>
+      </div>
+
+      <div class="glass" style="padding:22px;">
+        <div class="card-title"><i class="fa-solid fa-chart-area" style="color:var(--cyan);"></i> 24h Traffic by Direction</div>
+        <div class="chart-wrap"><canvas id="areaChart"></canvas></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="glass" style="padding:22px;">
+          <div class="card-title"><i class="fa-solid fa-chart-bar" style="color:var(--purple);"></i> Peak vs Off-Peak (Weekly)</div>
+          <div class="chart-wrap"><canvas id="peakChart"></canvas></div>
+        </div>
+        <div class="glass" style="padding:22px;">
+          <div class="card-title"><i class="fa-solid fa-chart-pie" style="color:var(--amber);"></i> Vehicle Mix</div>
+          <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════ REPORTS PAGE ═══════ -->
+    <section id="page-reports" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div>
+          <h2 style="font-size:16px;font-weight:600;">Reports</h2>
+          <p style="font-size:11px;color:var(--text3);margin-top:3px;">Download and manage traffic analysis reports</p>
+        </div>
+        <button class="btn btn-grad"><i class="fa-solid fa-plus"></i> Generate Report</button>
+      </div>
+
+      <div class="glass" style="padding:22px;">
+        <div class="card-title"><i class="fa-solid fa-wand-magic-sparkles" style="color:var(--cyan);"></i> Quick Generate</div>
+        <div class="report-quick">
+          <div class="report-quick-card">
+            <div class="report-quick-icon"><i class="fa-solid fa-calendar-day"></i></div>
+            <div class="report-quick-lbl">Daily Summary</div>
+            <div class="report-quick-desc">Today's full traffic report</div>
+          </div>
+          <div class="report-quick-card">
+            <div class="report-quick-icon"><i class="fa-solid fa-map"></i></div>
+            <div class="report-quick-lbl">Zone Analysis</div>
+            <div class="report-quick-desc">All zones breakdown</div>
+          </div>
+          <div class="report-quick-card">
+            <div class="report-quick-icon"><i class="fa-solid fa-car-burst"></i></div>
+            <div class="report-quick-lbl">Incident Log</div>
+            <div class="report-quick-desc">All incidents with images</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass" style="padding:22px;">
+        <div class="card-title"><i class="fa-solid fa-folder-open" style="color:var(--purple);"></i> Available Reports</div>
+        <div class="report-list" id="report-list"></div>
+      </div>
+    </section>
+
+    <!-- ═══════ ZONES PAGE ═══════ -->
+    <section id="page-zones" class="page">
+      <div>
+        <h2 style="font-size:16px;font-weight:600;">Monitoring Zones</h2>
+        <p style="font-size:11px;color:var(--text3);margin-top:3px;">Zone-level traffic management overview</p>
+      </div>
+
+      <div class="grid-4">
+        <div class="glass2 stat-card"><div class="stat-label">Total Zones     <div class="stat-icon" style="background:rgba(0,212,255,0.1);"><i class="fa-solid fa-map"                   style="color:var(--cyan);"></i></div></div><div class="stat-value" style="color:var(--cyan);">12</div></div>
+        <div class="glass2 stat-card"><div class="stat-label">Active Cameras  <div class="stat-icon" style="background:rgba(34,197,94,0.1);"><i class="fa-solid fa-video"                  style="color:var(--green);"></i></div></div><div class="stat-value" style="color:var(--green);">28</div></div>
+        <div class="glass2 stat-card"><div class="stat-label">Monitored Roads <div class="stat-icon" style="background:rgba(168,85,247,0.1);"><i class="fa-solid fa-road"                   style="color:var(--purple);"></i></div></div><div class="stat-value" style="color:var(--purple);">47 km</div></div>
+        <div class="glass2 stat-card"><div class="stat-label">Critical Zones  <div class="stat-icon" style="background:rgba(239,68,68,0.1);"><i class="fa-solid fa-triangle-exclamation" style="color:var(--red);"></i></div></div><div class="stat-value" style="color:var(--red);">1</div></div>
+      </div>
+
+      <div class="glass" style="padding:22px;">
+        <div class="card-title"><i class="fa-solid fa-map-location-dot" style="color:var(--cyan);"></i> Zone Status</div>
+        <div class="zone-list" id="zone-list"></div>
+      </div>
+    </section>
+
+    <!-- ═══════ ALERTS PAGE ═══════ -->
+    <section id="page-alerts" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <h2 style="font-size:16px;font-weight:600;">Alerts</h2>
+          <span id="unread-count" style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.25);font-weight:700;animation:blink 1.5s ease infinite;">3 new</span>
+        </div>
+        <button class="btn btn-ghost" style="font-size:12px;padding:7px 14px;" onclick="markAllRead()">
+          <i class="fa-solid fa-check-double"></i> Mark all read
+        </button>
+      </div>
+
+      <div class="alert-filters">
+        <button class="filter-btn active"     data-filter="all"      onclick="filterAlerts(this,'all')">All (6)</button>
+        <button class="filter-btn f-critical" data-filter="critical" onclick="filterAlerts(this,'critical')">Critical (2)</button>
+        <button class="filter-btn f-warning"  data-filter="warning"  onclick="filterAlerts(this,'warning')">Warning (2)</button>
+        <button class="filter-btn f-info"     data-filter="info"     onclick="filterAlerts(this,'info')">Info (2)</button>
+      </div>
+
+      <div class="alert-list" id="alert-list"></div>
+    </section>
+
+    <!-- ═══════ SETTINGS PAGE ═══════ -->
+    <section id="page-settings" class="page">
+      <div>
+        <h2 style="font-size:16px;font-weight:600;">Settings</h2>
+        <p style="font-size:11px;color:var(--text3);margin-top:3px;">Configure detection, alerts, and system preferences</p>
+      </div>
+
+      <div class="settings-grid">
+        <!-- Detection -->
+        <div class="glass settings-section">
+          <div class="settings-section-title"><i class="fa-solid fa-crosshairs" style="color:var(--cyan);"></i> Detection Settings</div>
+          <div class="settings-section-desc">AI model and detection configuration</div>
+          <div class="setting-row"><div><div class="setting-lbl">Real-time Detection</div><div class="setting-sub">Process camera feeds continuously</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">Vehicle Counting</div><div class="setting-sub">Track total vehicles per zone</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">Speed Estimation</div><div class="setting-sub">Estimate vehicle speed from frames</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">License Plate OCR</div><div class="setting-sub">Attempt plate recognition (GPU)</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row">
+            <div><div class="setting-lbl">Detection Confidence</div><div class="setting-sub">Minimum confidence threshold</div></div>
+            <div class="setting-slider-wrap">
+              <input type="range" min="0" max="100" value="82" oninput="this.nextElementSibling.textContent=this.value+'%'" />
+              <span class="setting-slider-val">82%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="glass settings-section">
+          <div class="settings-section-title"><i class="fa-solid fa-bell" style="color:var(--purple);"></i> Notifications</div>
+          <div class="settings-section-desc">Alert and notification preferences</div>
+          <div class="setting-row"><div><div class="setting-lbl">Critical Alerts</div><div class="setting-sub">Get notified on critical incidents</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">Congestion Warnings</div><div class="setting-sub">Alert when congestion exceeds threshold</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">Camera Offline Alerts</div><div class="setting-sub">Notify when a camera loses feed</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">Daily Summary Email</div><div class="setting-sub">Receive end-of-day traffic summary</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row">
+            <div><div class="setting-lbl">Congestion Threshold</div><div class="setting-sub">Trigger alert above this level</div></div>
+            <div class="setting-slider-wrap">
+              <input type="range" min="0" max="100" value="75" oninput="this.nextElementSibling.textContent=this.value+'%'" />
+              <span class="setting-slider-val">75%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- System -->
+        <div class="glass settings-section">
+          <div class="settings-section-title"><i class="fa-solid fa-server" style="color:var(--green);"></i> System</div>
+          <div class="settings-section-desc">Performance and storage options</div>
+          <div class="setting-row"><div><div class="setting-lbl">GPU Acceleration</div><div class="setting-sub">Use GPU for faster inference</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">Auto-scale Processing</div><div class="setting-sub">Adjust resources based on load</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">Cloud Backup</div><div class="setting-sub">Sync detections to cloud storage</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">Diagnostic Logging</div><div class="setting-sub">Enhanced logging for debugging</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row">
+            <div><div class="setting-lbl">Storage Retention</div><div class="setting-sub">How long to keep raw footage</div></div>
+            <div class="setting-slider-wrap">
+              <input type="range" min="1" max="90" value="30" oninput="this.nextElementSibling.textContent=this.value+'d'" />
+              <span class="setting-slider-val">30d</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Display -->
+        <div class="glass settings-section">
+          <div class="settings-section-title"><i class="fa-solid fa-display" style="color:var(--amber);"></i> Display</div>
+          <div class="settings-section-desc">UI and visualization preferences</div>
+          <div class="setting-row"><div><div class="setting-lbl">Dark Mode</div><div class="setting-sub">Use dark theme (recommended)</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">Show Bounding Boxes</div><div class="setting-sub">Draw detection boxes on live feed</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">Show Confidence Scores</div><div class="setting-sub">Display confidence % on detected objects</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row"><div><div class="setting-lbl">Heatmap Overlay</div><div class="setting-sub">Show traffic density heatmap</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row">
+            <div><div class="setting-lbl">Refresh Rate</div><div class="setting-sub">Auto-refresh interval in seconds</div></div>
+            <div class="setting-slider-wrap">
+              <input type="range" min="1" max="60" value="5" oninput="this.nextElementSibling.textContent=this.value+'s'" />
+              <span class="setting-slider-val">5s</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:4px;">
+        <button class="btn btn-grad"><i class="fa-solid fa-floppy-disk"></i> Save Changes</button>
+        <button class="btn btn-ghost">Reset to Defaults</button>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>TrafficSense AI &copy; 2026 &nbsp;·&nbsp; All cameras active &nbsp;·&nbsp; YOLOv8 inference engine</footer>
+</div>
+
+<!-- ═══════════════════════════════════════
+  LOGIN MODAL
+═══════════════════════════════════════ -->
+<div id="login-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999;align-items:center;justify-content:center;backdrop-filter:blur(6px);">
+  <div style="background:#0d1526;border:1px solid rgba(0,212,255,0.18);border-radius:16px;padding:36px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,0.6);">
+
+    <!-- Login form -->
+    <div id="login-form-wrap" style="display:flex;flex-direction:column;gap:18px;">
+      <div style="text-align:center;margin-bottom:4px;">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(168,85,247,0.2));border:1px solid rgba(0,212,255,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+          <i class="fa-solid fa-traffic-light" style="color:var(--cyan);font-size:18px;"></i>
+        </div>
+        <div style="font-size:18px;font-weight:700;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">TrafficSense AI</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Sign in to your account</div>
+      </div>
+
+      <form id="login-form" style="display:flex;flex-direction:column;gap:12px;">
+        <input id="login-email" type="email" placeholder="Email address" required
+          style="padding:10px 14px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text);font-size:13px;font-family:var(--font);outline:none;transition:border-color 0.2s;"
+          onfocus="this.style.borderColor='rgba(0,212,255,0.35)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'" />
+        <input id="login-password" type="password" placeholder="Password" required
+          style="padding:10px 14px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text);font-size:13px;font-family:var(--font);outline:none;transition:border-color 0.2s;"
+          onfocus="this.style.borderColor='rgba(0,212,255,0.35)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'" />
+        <div id="login-error" style="font-size:11px;color:var(--red);min-height:16px;"></div>
+        <button id="login-btn" type="submit" class="btn btn-grad" style="width:100%;justify-content:center;">Sign In</button>
+      </form>
+
+      <div style="text-align:center;font-size:11px;color:var(--text3);">
+        No account? <span onclick="switchToRegister()" style="color:var(--cyan);cursor:pointer;">Create one</span>
+      </div>
+    </div>
+
+    <!-- Register form -->
+    <div id="register-form-wrap" style="display:none;flex-direction:column;gap:18px;">
+      <div style="text-align:center;margin-bottom:4px;">
+        <div style="font-size:16px;font-weight:700;color:var(--text);">Create Account</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Register for TrafficSense AI</div>
+      </div>
+
+      <form id="register-form" style="display:flex;flex-direction:column;gap:12px;">
+        <input id="reg-username" type="text" placeholder="Username" required
+          style="padding:10px 14px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text);font-size:13px;font-family:var(--font);outline:none;transition:border-color 0.2s;"
+          onfocus="this.style.borderColor='rgba(0,212,255,0.35)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'" />
+        <input id="reg-email" type="email" placeholder="Email address" required
+          style="padding:10px 14px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text);font-size:13px;font-family:var(--font);outline:none;transition:border-color 0.2s;"
+          onfocus="this.style.borderColor='rgba(0,212,255,0.35)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'" />
+        <input id="reg-password" type="password" placeholder="Password (min 8 chars)" required minlength="8"
+          style="padding:10px 14px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text);font-size:13px;font-family:var(--font);outline:none;transition:border-color 0.2s;"
+          onfocus="this.style.borderColor='rgba(0,212,255,0.35)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'" />
+        <div id="register-error" style="font-size:11px;color:var(--red);min-height:16px;"></div>
+        <button id="register-btn" type="submit" class="btn btn-grad" style="width:100%;justify-content:center;">Create Account</button>
+      </form>
+
+      <div style="text-align:center;font-size:11px;color:var(--text3);">
+        Already have an account? <span onclick="switchToLogin()" style="color:var(--cyan);cursor:pointer;">Sign in</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+  SCRIPTS — load in dependency order
+═══════════════════════════════════════ -->
+<script src="/static/js/app.js"></script>
+<script src="/static/js/metrics.js"></script>
+<script src="/static/js/charts.js"></script>
+<script src="/static/js/feed.js"></script>
+<script src="/static/js/alerts.js"></script>
+<script src="/static/js/zones.js"></script>
+<script src="/static/js/reports.js"></script>
+<script src="/static/js/upload.js"></script>
+
+</body>
+</html>
