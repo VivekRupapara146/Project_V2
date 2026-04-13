@@ -12,7 +12,8 @@ from ultralytics import YOLO
 import numpy as np
 import os
 import logging
-import urllib.request
+# import urllib.request
+import gdown
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +34,21 @@ def load_model():
             url = "https://drive.google.com/uc?id=15ZpNO8wPa9I2vHTJHetVeEh1v8z2MCid"
 
             try:
-                urllib.request.urlretrieve(url, MODEL_PATH)
+                logger.info("[detector] Downloading model via gdown...")
+
+                gdown.download(url, MODEL_PATH, quiet=False)
+
+                # 🔥 Validate download (VERY IMPORTANT)
+                if not os.path.exists(MODEL_PATH) or os.path.getsize(MODEL_PATH) < 1_000_000:
+                    raise RuntimeError("Downloaded file is invalid or too small")
+
                 logger.info("[detector] Model downloaded successfully.")
+
             except Exception as e:
                 logger.error(f"[detector] Failed to download model: {e}")
                 raise RuntimeError("Model download failed")
+
+
         _model = YOLO(MODEL_PATH)
         logger.info(f"[detector] Model loaded from: {MODEL_PATH}")
     return _model
