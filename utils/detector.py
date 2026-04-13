@@ -23,31 +23,33 @@ CONFIDENCE_THRESHOLD = 0.4
 ALLOWED_CLASSES = {"person", "bicycle", "car", "bus", "motorbike", "traffic light"}
 
 
+def download_model():
+    url = os.getenv("MODEL_URL")
+
+    if not url:
+        raise RuntimeError("MODEL_URL environment variable not set")
+
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+
+    logger.info("[detector] Downloading model via gdown...")
+    gdown.download(url, MODEL_PATH, quiet=False)
+
+    if not os.path.exists(MODEL_PATH) or os.path.getsize(MODEL_PATH) < 1_000_000:
+        raise RuntimeError("Downloaded model is invalid")
+
+
 def load_model():
     global _model
     if _model is None:
         if not os.path.exists(MODEL_PATH):
             logger.info("[detector] Model not found locally. Downloading from remote...")
-
-            os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-
-            url = "https://drive.google.com/uc?id=15ZpNO8wPa9I2vHTJHetVeEh1v8z2MCid"
-
+            
             try:
-                logger.info("[detector] Downloading model via gdown...")
-
-                gdown.download(url, MODEL_PATH, quiet=False)
-
-                # 🔥 Validate download (VERY IMPORTANT)
-                if not os.path.exists(MODEL_PATH) or os.path.getsize(MODEL_PATH) < 1_000_000:
-                    raise RuntimeError("Downloaded file is invalid or too small")
-
+                download_model()
                 logger.info("[detector] Model downloaded successfully.")
-
             except Exception as e:
                 logger.error(f"[detector] Failed to download model: {e}")
                 raise RuntimeError("Model download failed")
-
 
         _model = YOLO(MODEL_PATH)
         logger.info(f"[detector] Model loaded from: {MODEL_PATH}")
