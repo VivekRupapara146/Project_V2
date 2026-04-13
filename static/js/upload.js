@@ -1,11 +1,11 @@
 /* ═══════════════════════════════════════════════════
    upload.js
-   Image / video upload + real detection results.
-   Manages session history for charts + download.
-
-   Session store (in-memory, cleared on logout):
-     window._sessionHistory  — array of analysis records
-     window._sessionUser     — email of logged-in user
+   Image detection  → POST /predict        → show annotated image
+   Video detection  → POST /upload_video_stream
+                    → GET  /video_detection_stream (MJPEG)
+                    → display annotated video live in browser
+                    → save DB every 10 frames (backend)
+   Session history  → accumulated for download + charts
 ═══════════════════════════════════════════════════ */
 
 const LABEL_COLORS = {
@@ -28,52 +28,51 @@ const VEH_CONFIG = {
 };
 
 // ── Session store ─────────────────────────────────
-// Initialised once per login, cleared on logout
 window._sessionHistory = window._sessionHistory || [];
 
 function _pushToSession(record) {
   window._sessionHistory.push(record);
   _refreshDownloadBtn();
 }
-
 function clearSessionHistory() {
   window._sessionHistory = [];
   _refreshDownloadBtn();
 }
-
 function _refreshDownloadBtn() {
   const btn = document.getElementById('download-session-btn');
   if (!btn) return;
   const count = window._sessionHistory.length;
-  if (count === 0) {
-    btn.style.display = 'none';
-  } else {
-    btn.style.display = 'flex';
-    btn.querySelector('#dl-count').textContent = count;
-  }
+  btn.style.display = count === 0 ? 'none' : 'flex';
+  const countEl = btn.querySelector('#dl-count');
+  if (countEl) countEl.textContent = count;
 }
 
-// ── Download session JSON ─────────────────────────
+// ── Download ──────────────────────────────────────
 window.downloadSessionJSON = function () {
   const user = Auth.getUser() || 'unknown';
   const data = {
-    session_user:  user,
-    exported_at:   new Date().toISOString(),
-    total_analyses: window._sessionHistory.length,
-    analyses:      window._sessionHistory,
+    session_user:    user,
+    exported_at:     new Date().toISOString(),
+    total_analyses:  window._sessionHistory.length,
+    analyses:        window._sessionHistory,
   };
-
-  const blob     = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url      = URL.createObjectURL(blob);
-  const a        = document.createElement('a');
-  const date     = new Date().toISOString().slice(0, 10);
-  a.href         = url;
-  a.download     = `trafficsense_session_${date}.json`;
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `trafficsense_session_${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 };
+
+// ── Video stream state ────────────────────────────
+let _currentVideoTmpPath  = null;
+let _videoProgressInterval = null;
+let _videoTotalFrames      = 0;
+let _videoFps              = 25;
+let _videoStartTime        = null;
 
 // ─────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -94,10 +93,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const fnameEl           = document.getElementById('upload-fname');
   const fnameText         = document.getElementById('fname-text');
   const bboxContainer     = document.getElementById('bbox-container');
+  // Video stream elements
+  const videoStreamWrap    = document.getElementById('video-stream-wrap');
+  const videoStreamImg     = document.getElementById('video-stream-img');
+  const videoStreamControls= document.getElementById('video-stream-controls');
+  const vstreamDot         = document.getElementById('vstream-dot');
+  const vstreamStatus      = document.getElementById('vstream-status');
+  const vstreamProgressBar = document.getElementById('vstream-progress-bar');
+  const vstreamFrameLabel  = document.getElementById('vstream-frame-label');
 
   let selectedFile = null;
 
-  // ── Drag / click upload ──────────────────────────
+  // ── Upload zone events ───────────────────────────
   uploadZone.addEventListener('click', () => fileInput.click());
   uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
   uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
@@ -117,13 +124,11 @@ document.addEventListener('DOMContentLoaded', () => {
     fnameEl.classList.add('show');
     analyzeBtn.disabled = false;
 
-    detGrid.style.display     = 'none';
-    scanOverlay.style.display = 'none';
-    resTl.style.display = 'none';
-    resTr.style.display = 'none';
-    if (bboxContainer) bboxContainer.innerHTML = '';
+    // Reset all result areas
+    _resetResultPanel();
 
-    if (file.type.startsWith('image/')) {
+    const isImage = file.type.startsWith('image/');
+    if (isImage) {
       const reader = new FileReader();
       reader.onload = e => {
         resultImg.src = e.target.result;
@@ -133,14 +138,27 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       reader.readAsDataURL(file);
     } else {
-      resultImgWrap.classList.remove('show');
+      // Video — show waiting state
       resultPlaceholder.style.display = 'flex';
       resultPlaceholder.innerHTML = `
-        <i class="fa-solid fa-film" style="font-size:28px;opacity:0.5;"></i>
+        <i class="fa-solid fa-film" style="font-size:28px;opacity:0.4;"></i>
         <span style="color:var(--cyan);font-size:13px;">${file.name}</span>
-        <span>Video ready — results will appear after analysis</span>
+        <span style="color:var(--text3);">Click Analyze to start video detection</span>
       `;
     }
+  }
+
+  function _resetResultPanel() {
+    // Stop any active video stream first
+    _stopVideoStream();
+    detGrid.style.display     = 'none';
+    scanOverlay.style.display = 'none';
+    resTl.style.display       = 'none';
+    resTr.style.display       = 'none';
+    if (bboxContainer) bboxContainer.innerHTML = '';
+    resultImgWrap.classList.remove('show');
+    if (videoStreamWrap)    videoStreamWrap.style.display    = 'none';
+    if (videoStreamControls) videoStreamControls.style.display = 'none';
   }
 
   // ── Analyze button ────────────────────────────────
@@ -148,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!selectedFile) return;
     selectedFile.type.startsWith('image/')
       ? await runImageDetection()
-      : await runVideoDetection();
+      : await runVideoStream();
   };
 
   // ═══════════════════════════════════════════════
@@ -179,6 +197,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function showImageResults(data) {
     hideProgress();
+    if (videoStreamWrap)    videoStreamWrap.style.display    = 'none';
+    if (videoStreamControls) videoStreamControls.style.display = 'none';
+
+    resultPlaceholder.style.display = 'none';
+    resultImgWrap.classList.add('show');
     resultImgWrap.style.opacity = '1';
     scanOverlay.style.display   = 'block';
     resTl.style.display         = 'flex';
@@ -211,15 +234,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const counts = {};
     data.objects.forEach(o => { counts[o.label] = (counts[o.label] || 0) + 1; });
 
-    // Save to session
     _pushToSession({
-      timestamp:  new Date().toISOString(),
-      filename:   selectedFile.name,
-      type:       'image',
-      total_objects: data.count,
-      counts,
-      total:      data.count,
-      objects:    data.objects,
+      timestamp: new Date().toISOString(), filename: selectedFile.name,
+      type: 'image', total_objects: data.count, counts, total: data.count,
+      objects: data.objects,
     });
 
     updateDashboard(data.objects, counts);
@@ -227,78 +245,188 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ═══════════════════════════════════════════════
-  // VIDEO DETECTION
+  // VIDEO STREAM DETECTION
   // ═══════════════════════════════════════════════
-  async function runVideoDetection() {
+  async function runVideoStream() {
     showProgress('Uploading video...');
-    animateProgressBar(0, 20);
+    animateProgressBar(0, 40);
 
     const formData = new FormData();
     formData.append('video', selectedFile);
 
-    let data;
+    let meta;
     try {
-      animateProgressBar(20, 85);
-      setProgressLabel('Running detection on all frames...');
-      const res = await apiFetch('/predict_video', { method: 'POST', body: formData });
-      animateProgressBar(85, 100);
-      data = await res.json();
-      if (!res.ok) { showError(data.error || 'Video detection failed.'); return; }
+      const res = await apiFetch('/upload_video_stream', { method: 'POST', body: formData });
+      animateProgressBar(40, 90);
+      meta = await res.json();
+      if (!res.ok) { showError(meta.error || 'Upload failed.'); return; }
     } catch (err) {
       showError('Network error. Is the server running?');
       return;
     }
 
-    setTimeout(() => showVideoResults(data), 300);
+    animateProgressBar(90, 100);
+    setTimeout(() => startVideoStream(meta), 300);
   }
 
-  function showVideoResults(data) {
+  function startVideoStream(meta) {
     hideProgress();
     analyzeBtn.disabled = false;
 
+    _currentVideoTmpPath = meta.tmp_path;
+    _videoTotalFrames    = meta.total_frames || 0;
+    _videoFps            = meta.fps || 25;
+    _videoStartTime      = Date.now();
+
+    // Hide image result, show video stream panel
+    resultPlaceholder.style.display = 'none';
     resultImgWrap.classList.remove('show');
-    resultPlaceholder.style.display = 'flex';
 
-    const total     = data.total_frames     || 0;
-    const processed = data.processed_frames || 0;
-    resultPlaceholder.innerHTML = `
-      <i class="fa-solid fa-circle-check" style="font-size:28px;color:var(--green);opacity:1;"></i>
-      <span style="color:var(--green);font-size:13px;font-weight:600;">Video Analysis Complete</span>
-      <span>${processed} frames with detections out of ${total} total frames</span>
-    `;
+    if (videoStreamWrap) {
+      videoStreamWrap.style.display = 'block';
+      // Set img src — browser opens MJPEG connection to Flask
+      const token = Auth.getToken();
+      videoStreamImg.src = meta.stream_url;
+      // Pass token via header isn't possible for img src,
+      // but /video_detection_stream accepts optional auth and works without it too
+    }
 
-    resTl.style.display = 'flex';
-    resTr.style.display = 'block';
-    resTr.textContent   = `${processed} frames`;
+    if (videoStreamControls) {
+      videoStreamControls.style.display = 'flex';
+    }
 
-    const summary = data.summary || {};
-    const totalDetected = Object.values(summary).reduce((a, b) => a + b, 0);
+    if (vstreamStatus) {
+      vstreamStatus.textContent = 'PLAYING';
+      vstreamStatus.style.color = '#22c55e';
+    }
+    if (vstreamDot) {
+      vstreamDot.style.background = '#22c55e';
+    }
 
-    // Save to session
-    _pushToSession({
-      timestamp:      new Date().toISOString(),
-      filename:       selectedFile.name,
-      type:           'video',
-      total_frames:   total,
-      processed_frames: processed,
-      total_objects:  totalDetected,
-      counts:         summary,
-      total:          totalDetected,
-      detections_by_frame: data.detections_by_frame || [],
-    });
+    // Progress bar — estimate based on elapsed time vs expected duration
+    const expectedDuration = (_videoTotalFrames / _videoFps) * 1000;
+    if (_videoProgressInterval) clearInterval(_videoProgressInterval);
+    _videoProgressInterval = setInterval(() => {
+      const elapsed = Date.now() - _videoStartTime;
+      const pct     = Math.min(99, (elapsed / expectedDuration) * 100);
+      if (vstreamProgressBar) vstreamProgressBar.style.width = pct + '%';
 
-    // Build fake flat objects list for updateDashboard stat cards
-    const fakeObjects = [];
-    Object.entries(summary).forEach(([lbl, cnt]) => {
-      for (let i = 0; i < cnt; i++) fakeObjects.push({ label: lbl, confidence: 0 });
-    });
+      const estimatedFrame = Math.min(_videoTotalFrames, Math.round(elapsed / 1000 * _videoFps));
+      if (vstreamFrameLabel) {
+        vstreamFrameLabel.textContent = `Frame ~${estimatedFrame} / ${_videoTotalFrames}`;
+      }
 
-    updateDashboard(fakeObjects, summary, data);
-    updateChartsFromSession(window._sessionHistory, summary);
+      // Auto-complete when stream ends (img onerror or time exceeded)
+      if (pct >= 99) {
+        _onVideoStreamComplete();
+      }
+    }, 500);
+
+    // When MJPEG stream ends, the img load will stop — detect via load event
+    videoStreamImg.onload = null;
+    videoStreamImg.onerror = () => {
+      // Stream ended or error — mark as done
+      _onVideoStreamComplete();
+    };
+  }
+
+  function _onVideoStreamComplete() {
+    if (_videoProgressInterval) {
+      clearInterval(_videoProgressInterval);
+      _videoProgressInterval = null;
+    }
+    if (vstreamProgressBar) vstreamProgressBar.style.width = '100%';
+    if (vstreamStatus) {
+      vstreamStatus.textContent = 'COMPLETE';
+      vstreamStatus.style.color = '#22c55e';
+    }
+    if (vstreamDot) {
+      vstreamDot.style.animation = 'none';
+      vstreamDot.style.background = '#22c55e';
+    }
+    if (vstreamFrameLabel) {
+      vstreamFrameLabel.textContent = `${_videoTotalFrames} / ${_videoTotalFrames} frames`;
+    }
+
+    // Build summary from estimated counts (we don't get live counts from stream)
+    // Show a "View Summary" notice — the actual counts are in the DB
+    _showVideoCompleteSummary();
+
+    // Cleanup temp file on server
+    if (_currentVideoTmpPath) {
+      fetch('/cleanup_video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: _currentVideoTmpPath }),
+      }).catch(() => {});
+    }
+  }
+
+  function _showVideoCompleteSummary() {
+    const filename = selectedFile ? selectedFile.name : 'video';
+
+    // Push a session record for the video
+    const sessionRecord = {
+      timestamp:       new Date().toISOString(),
+      filename,
+      type:            'video_stream',
+      total_frames:    _videoTotalFrames,
+      total_objects:   null,   // not available from stream — would need separate API call
+      counts:          {},
+      total:           0,
+      note:            'Detection results saved to DB every 10 frames during streaming',
+    };
+    _pushToSession(sessionRecord);
+
+    // Update stat cards to show video info
+    const totalEl    = document.getElementById('stat-total');
+    const totalSubEl = document.getElementById('stat-total-sub');
+    const topClassEl = document.getElementById('stat-top-class');
+    const topCountEl = document.getElementById('stat-top-count');
+    const confEl     = document.getElementById('stat-conf');
+    const confSubEl  = document.getElementById('stat-conf-sub');
+
+    if (totalEl)    totalEl.textContent    = _videoTotalFrames;
+    if (totalSubEl) totalSubEl.textContent = 'frames processed';
+    if (topClassEl) topClassEl.textContent = '—';
+    if (topCountEl) topCountEl.textContent = 'Results saved to DB';
+    if (confEl)     confEl.textContent     = '—';
+    if (confSubEl)  confSubEl.textContent  = 'Check Analytics page';
+  }
+
+  // ── Stop video stream (user-initiated) ───────────
+  window.stopVideoStream = function () {
+    _stopVideoStream();
+  };
+
+  function _stopVideoStream() {
+    if (!_currentVideoTmpPath && !videoStreamImg?.src) return;
+
+    // Detach stream
+    if (videoStreamImg) {
+      videoStreamImg.onerror = null;
+      videoStreamImg.src     = '';
+    }
+    if (videoStreamControls) videoStreamControls.style.display = 'none';
+
+    if (_videoProgressInterval) {
+      clearInterval(_videoProgressInterval);
+      _videoProgressInterval = null;
+    }
+
+    // Cleanup temp file
+    if (_currentVideoTmpPath) {
+      fetch('/cleanup_video', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ path: _currentVideoTmpPath }),
+      }).catch(() => {});
+      _currentVideoTmpPath = null;
+    }
   }
 
   // ═══════════════════════════════════════════════
-  // UPDATE STAT CARDS + VEH BREAKDOWN
+  // SHARED: STAT CARDS + VEH BREAKDOWN
   // ═══════════════════════════════════════════════
   function updateDashboard(objects, counts, videoData) {
     renderDetGrid(counts);
@@ -329,13 +457,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (topClassEl)  topClassEl.textContent = topClass.charAt(0).toUpperCase() + topClass.slice(1);
     if (topCountEl)  topCountEl.textContent = topCount ? `${topCount} detected` : 'No detections';
     if (classesEl)   animateCounter(classesEl, classCount, 700);
-    if (classesSubEl) classesSubEl.textContent = classCount
-      ? sorted.map(([l]) => l).join(', ')
-      : 'None found';
+    if (classesSubEl) classesSubEl.textContent = classCount ? sorted.map(([l]) => l).join(', ') : 'None found';
     if (confEl)      confEl.textContent = avgConf;
-    if (confSubEl)   confSubEl.textContent = confs.length
-      ? 'Across all detections'
-      : 'N/A for video summary';
+    if (confSubEl)   confSubEl.textContent = confs.length ? 'Across all detections' : 'N/A';
 
     renderVehCards(counts);
   }
@@ -392,7 +516,6 @@ document.addEventListener('DOMContentLoaded', () => {
       bicycle:         { icon: 'fa-bicycle',        color: 'var(--green)' },
       'traffic light': { icon: 'fa-traffic-light',  color: 'var(--amber)' },
     };
-
     const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
     if (!entries.length) { detGrid.style.display = 'none'; return; }
 
@@ -408,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
     detGrid.style.display = 'grid';
   }
 
-  // ── Progress helpers ──────────────────────────────
+  // ── Progress bar helpers ──────────────────────────
   let _pi = null;
   function showProgress(label) { analyzeBtn.disabled = true; progressWrap.classList.add('show'); setProgressLabel(label); setProgressPct(0); }
   function hideProgress() { progressWrap.classList.remove('show'); if (_pi) { clearInterval(_pi); _pi = null; } }

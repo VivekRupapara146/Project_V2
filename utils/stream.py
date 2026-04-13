@@ -121,6 +121,79 @@ def generate_frames(source=0, user_email: str = None):
         logger.info("[stream] 🛑 Camera released.")
 
 
+def generate_video_detection_stream(video_path: str, user_email: str = None):
+    """
+    Generator that reads an uploaded video file frame by frame,
+    runs YOLO detection on each frame, draws bounding boxes,
+    and yields MJPEG-encoded bytes for live browser playback.
+
+    Saves detection results to MongoDB every 10 frames (via source="video_upload").
+
+    Args:
+        video_path  (str): Absolute path to the uploaded video file.
+        user_email  (str): Logged-in user's email for DB storage.
+
+    Yields:
+        bytes: MJPEG frame chunk for multipart/x-mixed-replace streaming.
+    """
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise RuntimeError(f"Cannot open video: {video_path}")
+    except Exception as e:
+        logger.error(f"[stream] generate_video_detection_stream open error: {e}")
+        return
+
+    fps          = cap.get(cv2.CAP_PROP_FPS) or 25
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_index  = 0
+
+    logger.info(f"[stream] 🎬 Video detection stream started: {total_frames} frames @ {fps:.1f} FPS")
+
+    try:
+        while True:
+            success, frame = cap.read()
+            if not success:
+                break
+
+            frame_index += 1
+            frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
+
+            # ── Run detection ─────────────────────────────────────────────────
+            try:
+                # Use source="video_upload" so DB uses the separate 10-frame counter
+                detections = detect(frame, source="video_upload", user_email=user_email)
+                frame      = draw_boxes(frame, detections)
+            except Exception as e:
+                logger.error(f"[stream] Frame {frame_index} detection error: {e}")
+
+            # ── Encode progress overlay onto frame ────────────────────────────
+            progress_pct = int(frame_index / total_frames * 100) if total_frames else 0
+            cv2.putText(
+                frame,
+                f"Frame {frame_index}/{total_frames}  ({progress_pct}%)",
+                (8, FRAME_HEIGHT - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.42,
+                (200, 200, 200), 1, cv2.LINE_AA
+            )
+
+            # ── JPEG encode ───────────────────────────────────────────────────
+            ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
+            if not ok:
+                continue
+
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n"
+                + buffer.tobytes()
+                + b"\r\n"
+            )
+
+    finally:
+        cap.release()
+        logger.info(f"[stream] ✅ Video detection stream finished: {frame_index} frames processed.")
+
+
 def process_video_upload(video_path: str, user_email: str = None) -> dict:
     """
     Run detection on every frame of an uploaded video file.

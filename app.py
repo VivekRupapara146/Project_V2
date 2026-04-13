@@ -19,7 +19,11 @@ from flask_cors import CORS
 
 from utils.detector   import load_model, detect
 from utils.visualizer import draw_boxes
-from utils.stream     import generate_frames, process_video_upload, allowed_video, request_stop, clear_stop, is_streaming
+from utils.stream     import (
+    generate_frames, generate_video_detection_stream,
+    process_video_upload, allowed_video,
+    request_stop, clear_stop, is_streaming
+)
 from utils.database   import (
     connect as db_connect,
     get_recent_detections,
@@ -397,6 +401,127 @@ def predict_video():
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
             logger.info(f"[/predict_video] Temp file cleaned up: {tmp_path}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Route: POST /upload_video_stream — upload video, get back stream path
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/upload_video_stream")
+@limiter.limit(PREDICT_LIMIT)
+@require_auth
+def upload_video_stream():
+    """
+    Accept an uploaded video file, save it to /tmp, and return the temp path
+    so the frontend can open GET /video_detection_stream?path=<tmp_path>.
+
+    We keep the file alive until the stream finishes — a separate cleanup
+    endpoint is called by the frontend when playback ends.
+
+    Response 200:
+        { "stream_url": "/video_detection_stream?path=<tmp_path>",
+          "total_frames": 300, "fps": 25.0 }
+    """
+    import tempfile
+
+    if "video" not in request.files:
+        return jsonify({"error": "No 'video' field in request."}), 400
+
+    file = request.files["video"]
+    if file.filename == "":
+        return jsonify({"error": "Empty filename."}), 400
+
+    if not allowed_video(file.filename):
+        record_error("invalid_input")
+        return jsonify({"error": "Unsupported video format. Allowed: mp4, avi, mov, mkv, webm"}), 400
+
+    ext = file.filename.rsplit(".", 1)[1].lower()
+    try:
+        with tempfile.NamedTemporaryFile(
+            suffix=f".{ext}", delete=False, dir="/tmp", prefix="ts_vid_"
+        ) as tmp:
+            file.save(tmp)
+            tmp_path = tmp.name
+
+        # Read metadata without opening full stream
+        import cv2 as _cv2
+        cap = _cv2.VideoCapture(tmp_path)
+        total_frames = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT))
+        fps          = cap.get(_cv2.CAP_PROP_FPS) or 25
+        cap.release()
+
+        logger.info(f"[/upload_video_stream] Saved to {tmp_path}, {total_frames} frames")
+
+        return jsonify({
+            "stream_url":    f"/video_detection_stream?path={tmp_path}",
+            "tmp_path":      tmp_path,
+            "total_frames":  total_frames,
+            "fps":           round(fps, 2),
+        })
+
+    except Exception as e:
+        logger.error(f"[/upload_video_stream] Error: {e}")
+        return jsonify({"error": "Failed to prepare video for streaming."}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Route: GET /video_detection_stream — stream annotated video frames as MJPEG
+# ─────────────────────────────────────────────────────────────────────────────
+@app.get("/video_detection_stream")
+def video_detection_stream():
+    """
+    Stream an uploaded video file with YOLO annotations as MJPEG.
+    The ?path= query param must point to a valid /tmp/ts_vid_*.* file
+    (created by POST /upload_video_stream).
+
+    Embeds in browser via: <img src="/video_detection_stream?path=...">
+    """
+    tmp_path   = request.args.get("path", "")
+    user_email = None
+
+    # Validate the path — only allow our own temp files
+    if not tmp_path or not tmp_path.startswith("/tmp/ts_vid_"):
+        return jsonify({"error": "Invalid or missing path parameter."}), 400
+
+    if not os.path.exists(tmp_path):
+        return jsonify({"error": "Video file not found or already cleaned up."}), 404
+
+    # Optional auth — read user from header if present
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        from utils.auth import decode_token
+        payload = decode_token(auth_header.split(" ", 1)[1].strip())
+        if payload:
+            user_email = payload.get("sub")
+
+    return Response(
+        generate_video_detection_stream(tmp_path, user_email=user_email),
+        mimetype="multipart/x-mixed-replace; boundary=frame"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Route: POST /cleanup_video — delete temp video file after stream ends
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/cleanup_video")
+def cleanup_video():
+    """
+    Delete a temp video file created by /upload_video_stream.
+    Called by the frontend when the stream <img> finishes or user navigates away.
+    """
+    data     = request.get_json(silent=True) or {}
+    tmp_path = data.get("path", "")
+
+    if not tmp_path or not tmp_path.startswith("/tmp/ts_vid_"):
+        return jsonify({"error": "Invalid path."}), 400
+
+    try:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+            logger.info(f"[/cleanup_video] Deleted: {tmp_path}")
+        return jsonify({"message": "Cleaned up."})
+    except Exception as e:
+        logger.error(f"[/cleanup_video] Failed: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # ─────────────────────────────────────────────────────────────────────────────

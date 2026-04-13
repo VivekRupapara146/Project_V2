@@ -24,12 +24,12 @@ from pymongo.errors import ConnectionFailure, OperationFailure
 logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-MONGO_URI         = os.getenv("MONGO_URI", "mongodb+srv://db_user:pass@cluster0.24idgza.mongodb.net/?appName=Cluster0")
+MONGO_URI         = os.getenv("MONGO_URI", "mongodb+srv://<user>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority")
 DB_NAME           = os.getenv("DB_NAME",   "traffic_detection")
 COLLECTION_FRAMES = "frames"
 COLLECTION_USERS  = "users"
 
-SAVE_EVERY_N_FRAMES    = 5
+SAVE_EVERY_N_FRAMES    = 10     # Save 1 out of every 10 video frames
 MIN_CONFIDENCE_TO_SAVE = 0.5
 
 MAX_CONNECT_RETRIES = 5
@@ -42,9 +42,10 @@ _db                                   = None
 _write_queue: queue.Queue             = queue.Queue(maxsize=500)
 _worker_thread: threading.Thread | None  = None
 _watchdog_thread: threading.Thread | None = None
-_frame_counter: int                   = 0
-_counter_lock                         = threading.Lock()
-_connect_lock                         = threading.Lock()
+_frame_counter: int          = 0   # webcam stream frame counter
+_upload_frame_counter: int   = 0   # uploaded video frame counter (separate)
+_counter_lock                = threading.Lock()
+_connect_lock                = threading.Lock()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -172,16 +173,24 @@ def _write_loop():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def should_save(detections: list[dict], source: str = "video") -> bool:
-    global _frame_counter
+    global _frame_counter, _upload_frame_counter
 
-    # Images are single intentional uploads — ALWAYS save them,
-    # bypassing the every-N-frames counter entirely.
+    # Images — always save if confidence met, bypass counter
     if source == "image":
         if not detections:
             return False
         return any(d.get("conf", 0) >= MIN_CONFIDENCE_TO_SAVE for d in detections)
 
-    # Video frames: apply every-N-frames + confidence filter
+    # Uploaded video detection stream — uses its own counter
+    if source == "video_upload":
+        with _counter_lock:
+            _upload_frame_counter += 1
+            save_by_count = (_upload_frame_counter % SAVE_EVERY_N_FRAMES == 0)
+        if not save_by_count or not detections:
+            return False
+        return any(d.get("conf", 0) >= MIN_CONFIDENCE_TO_SAVE for d in detections)
+
+    # Webcam video frames — uses main counter
     with _counter_lock:
         _frame_counter += 1
         save_by_count = (_frame_counter % SAVE_EVERY_N_FRAMES == 0)

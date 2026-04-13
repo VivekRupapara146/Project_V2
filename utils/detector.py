@@ -12,6 +12,7 @@ from ultralytics import YOLO
 import numpy as np
 import os
 import logging
+import urllib.request
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +26,18 @@ def load_model():
     global _model
     if _model is None:
         if not os.path.exists(MODEL_PATH):
-            raise FileNotFoundError(
-                f"Model file not found at: {MODEL_PATH}\n"
-                "Please place best.pt inside the /model directory."
-            )
+            logger.info("[detector] Model not found locally. Downloading from remote...")
+
+            os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+
+            url = "https://drive.google.com/uc?id=15ZpNO8wPa9I2vHTJHetVeEh1v8z2MCid"
+
+            try:
+                urllib.request.urlretrieve(url, MODEL_PATH)
+                logger.info("[detector] Model downloaded successfully.")
+            except Exception as e:
+                logger.error(f"[detector] Failed to download model: {e}")
+                raise RuntimeError("Model download failed")
         _model = YOLO(MODEL_PATH)
         logger.info(f"[detector] Model loaded from: {MODEL_PATH}")
     return _model
