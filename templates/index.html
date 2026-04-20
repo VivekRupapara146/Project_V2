@@ -352,24 +352,32 @@
 
       <div class="grid-4">
         <div class="glass2 stat-card">
-          <div class="stat-label">Avg Congestion <div class="stat-icon" style="background:rgba(34,197,94,0.1);"><i class="fa-solid fa-traffic-light" style="color:var(--green);"></i></div></div>
-          <div class="stat-value" style="color:var(--green);">34%</div>
-          <div class="stat-sub" style="color:var(--green);">-5% from last week</div>
+          <div class="stat-label">Total Detected
+            <div class="stat-icon" style="background:rgba(34,197,94,0.1);"><i class="fa-solid fa-car-burst" style="color:var(--green);"></i></div>
+          </div>
+          <div class="stat-value" style="color:var(--green);" id="analytics-total">—</div>
+          <div class="stat-sub" id="analytics-total-sub" style="color:var(--text3);">Across all session analyses</div>
         </div>
         <div class="glass2 stat-card">
-          <div class="stat-label">Peak Hour Traffic <div class="stat-icon" style="background:rgba(0,212,255,0.1);"><i class="fa-solid fa-chart-area" style="color:var(--cyan);"></i></div></div>
-          <div class="stat-value" style="color:var(--cyan);">855</div>
-          <div class="stat-sub">Fri 08:00–09:00</div>
+          <div class="stat-label">Top Class
+            <div class="stat-icon" style="background:rgba(0,212,255,0.1);"><i class="fa-solid fa-trophy" style="color:var(--cyan);"></i></div>
+          </div>
+          <div class="stat-value" style="color:var(--cyan);font-size:20px;" id="analytics-top-class">—</div>
+          <div class="stat-sub" id="analytics-top-count" style="color:var(--text3);">Most detected class</div>
         </div>
         <div class="glass2 stat-card">
-          <div class="stat-label">Incidents Detected <div class="stat-icon" style="background:rgba(239,68,68,0.1);"><i class="fa-solid fa-car-crash" style="color:var(--red);"></i></div></div>
-          <div class="stat-value" style="color:var(--red);">3</div>
-          <div class="stat-sub">Today</div>
+          <div class="stat-label">Analyses Done
+            <div class="stat-icon" style="background:rgba(239,68,68,0.1);"><i class="fa-solid fa-layer-group" style="color:var(--red);"></i></div>
+          </div>
+          <div class="stat-value" style="color:var(--red);" id="analytics-analyses">—</div>
+          <div class="stat-sub" id="analytics-analyses-sub" style="color:var(--text3);">This session</div>
         </div>
         <div class="glass2 stat-card">
-          <div class="stat-label">Avg Journey Time <div class="stat-icon" style="background:rgba(168,85,247,0.1);"><i class="fa-solid fa-clock" style="color:var(--purple);"></i></div></div>
-          <div class="stat-value" style="color:var(--purple);">18m</div>
-          <div class="stat-sub">+2m vs baseline</div>
+          <div class="stat-label">Avg Confidence
+            <div class="stat-icon" style="background:rgba(168,85,247,0.1);"><i class="fa-solid fa-gauge-high" style="color:var(--purple);"></i></div>
+          </div>
+          <div class="stat-value" style="color:var(--purple);" id="analytics-conf">—</div>
+          <div class="stat-sub" id="analytics-conf-sub" style="color:var(--text3);">Across all detections</div>
         </div>
       </div>
 

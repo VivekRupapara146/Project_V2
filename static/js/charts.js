@@ -168,14 +168,85 @@ function initAnalyticsCharts() {
 /* ═══════════════════════════════════════════════════
    UPDATE ALL CHARTS FROM SESSION DATA
    Called by upload.js after every successful analysis.
-
-   sessionHistory: array of all analyses this session
-     [{ filename, type, timestamp, counts, total }, ...]
-   latestCounts: { car: 3, person: 2, ... } from latest run
 ═══════════════════════════════════════════════════ */
 function updateChartsFromSession(sessionHistory, latestCounts) {
   _updateDashboardCharts(sessionHistory);
   _updateAnalyticsCharts(sessionHistory, latestCounts);
+  updateAnalyticsStatCards(sessionHistory);
+}
+
+/* ═══════════════════════════════════════════════════
+   UPDATE ANALYTICS PAGE STAT CARDS
+   Computes real aggregates from the full session history.
+═══════════════════════════════════════════════════ */
+function updateAnalyticsStatCards(history) {
+  if (!history || !history.length) return;
+
+  // ── Cumulative totals across all analyses ─────────
+  let totalObjects   = 0;
+  let totalConfs     = 0;
+  let confCount      = 0;
+  const cumulativeCounts = {};
+
+  history.forEach(h => {
+    totalObjects += (h.total || 0);
+
+    // Sum class counts
+    Object.entries(h.counts || {}).forEach(([lbl, cnt]) => {
+      cumulativeCounts[lbl] = (cumulativeCounts[lbl] || 0) + cnt;
+    });
+
+    // Avg confidence (only available for image analyses with full objects array)
+    if (h.objects && Array.isArray(h.objects)) {
+      h.objects.forEach(o => {
+        if (o.confidence > 0) {
+          totalConfs += o.confidence;
+          confCount++;
+        }
+      });
+    }
+  });
+
+  // Top class
+  const sorted   = Object.entries(cumulativeCounts).sort((a, b) => b[1] - a[1]);
+  const topClass = sorted[0]?.[0] || '—';
+  const topCount = sorted[0]?.[1] || 0;
+  const avgConf  = confCount > 0
+    ? (totalConfs / confCount * 100).toFixed(1) + '%'
+    : '—';
+
+  // ── Update DOM ────────────────────────────────────
+  const totalEl        = document.getElementById('analytics-total');
+  const totalSubEl     = document.getElementById('analytics-total-sub');
+  const topClassEl     = document.getElementById('analytics-top-class');
+  const topCountEl     = document.getElementById('analytics-top-count');
+  const analysesEl     = document.getElementById('analytics-analyses');
+  const analysesSubEl  = document.getElementById('analytics-analyses-sub');
+  const confEl         = document.getElementById('analytics-conf');
+  const confSubEl      = document.getElementById('analytics-conf-sub');
+
+  if (totalEl)       animateCounter(totalEl, totalObjects, 900);
+  if (totalSubEl)    totalSubEl.textContent =
+    `${history.length} ` + (history.length === 1 ? 'analysis' : 'analyses') + ' combined';
+
+  if (topClassEl)    topClassEl.textContent =
+    topClass !== '—' ? topClass.charAt(0).toUpperCase() + topClass.slice(1) : '—';
+  if (topCountEl)    topCountEl.textContent =
+    topCount ? `${topCount} total detections` : 'No data yet';
+
+  if (analysesEl)    animateCounter(analysesEl, history.length, 600);
+  if (analysesSubEl) {
+    const imageCount = history.filter(h => h.type === 'image').length;
+    const videoCount = history.filter(h => h.type !== 'image').length;
+    const parts = [];
+    if (imageCount) parts.push(`${imageCount} image${imageCount > 1 ? 's' : ''}`);
+    if (videoCount) parts.push(`${videoCount} video${videoCount > 1 ? 's' : ''}`);
+    analysesSubEl.textContent = parts.length ? parts.join(', ') : 'This session';
+  }
+
+  if (confEl)        confEl.textContent = avgConf;
+  if (confSubEl)     confSubEl.textContent =
+    confCount > 0 ? `From ${confCount} detections` : 'Images only (videos N/A)';
 }
 
 // ── Dashboard: bar = per-analysis class counts, line = totals/classes ──────
@@ -266,14 +337,32 @@ function _shortName(filename) {
 }
 
 /* ═══════════════════════════════════════════════════
-   RESET — called on logout to wipe charts
+   RESET — called on logout to wipe charts + stat cards
 ═══════════════════════════════════════════════════ */
 function resetCharts() {
   initDashboardCharts();
-  // Analytics charts reset lazily when user navigates back to that page
   if (_pieChart)  { _pieChart.destroy();  _pieChart  = null; }
   if (_peakChart) { _peakChart.destroy(); _peakChart = null; }
   if (_areaChart) { _areaChart.destroy(); _areaChart = null; }
-  // Reset chartsInitialized flag so they re-init on next visit
   chartsInitialized.analytics = false;
+
+  // Reset analytics stat cards to blank state
+  const ids = [
+    'analytics-total', 'analytics-top-class',
+    'analytics-analyses', 'analytics-conf',
+  ];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
+  const subs = {
+    'analytics-total-sub':    'Across all session analyses',
+    'analytics-top-count':    'Most detected class',
+    'analytics-analyses-sub': 'This session',
+    'analytics-conf-sub':     'Across all detections',
+  };
+  Object.entries(subs).forEach(([id, txt]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  });
 }
