@@ -2,6 +2,7 @@
 detector.py
 Core inference logic using YOLOv8.
 
+
 v3 additions:
   - track_inference() context manager wraps model call for latency/FPS metrics
   - record_error("inference") on any model failure
