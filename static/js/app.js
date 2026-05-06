@@ -1,58 +1,79 @@
 /* ═══════════════════════════════════════════════════
    app.js
    Navigation, sidebar, counters, chart defaults,
-   auth token management, shared API helper
+   auth token management, shared API helper,
+   guest mode support
 ═══════════════════════════════════════════════════ */
 
-const API_BASE = '';   // same origin — Flask serves both frontend and API
+const API_BASE = '';
+
+/* ═══════════════════════════════════════════════════
+   GUEST MODE FLAG
+   true  → user chose "Continue as Guest"
+   false → user is authenticated
+═══════════════════════════════════════════════════ */
+window._guestMode = false;
 
 /* ═══════════════════════════════════════════════════
    AUTH — JWT token management
 ═══════════════════════════════════════════════════ */
 const Auth = {
-  getToken()        { return localStorage.getItem('ts_token'); },
-  setToken(t)       { localStorage.setItem('ts_token', t); },
-  removeToken()     { localStorage.removeItem('ts_token'); },
-  isLoggedIn()      { return !!this.getToken(); },
+  getToken()  { return localStorage.getItem('ts_token'); },
+  setToken(t) { localStorage.setItem('ts_token', t); },
+  removeToken(){ localStorage.removeItem('ts_token'); },
+  isLoggedIn(){ return !!this.getToken(); },
 
   getUser() {
     const t = this.getToken();
     if (!t) return null;
     try {
-      // Decode JWT payload (base64 middle segment) — no verify, just read
       const payload = JSON.parse(atob(t.split('.')[1]));
-      // Check expiry
       if (payload.exp && Date.now() / 1000 > payload.exp) {
         this.removeToken();
         return null;
       }
-      return payload.sub;   // email
+      return payload.sub;
     } catch { return null; }
   },
 
   logout() {
     this.removeToken();
-    // Clear session analysis history so next login starts fresh
-    window._sessionHistory = [];
-    // Reset charts back to empty state
+    window._guestMode       = false;
+    window._sessionHistory  = [];
     if (typeof resetCharts === 'function') resetCharts();
+    _updateHeaderForAuth();
     showLoginModal();
   }
 };
 
 /* ═══════════════════════════════════════════════════
-   API HELPER — always attaches JWT header
+   GUEST MODE ENTRY
+═══════════════════════════════════════════════════ */
+function enterGuestMode() {
+  window._guestMode = true;
+  hideLoginModal();
+  _updateHeaderForGuest();
+  _showGuestBanner();
+  onAuthSuccess();   // init charts + metrics same as auth
+}
+
+/* ═══════════════════════════════════════════════════
+   API HELPER — attaches JWT if present
+   Guest requests go through without Authorization header
 ═══════════════════════════════════════════════════ */
 async function apiFetch(path, options = {}) {
-  const token = Auth.getToken();
+  const token   = Auth.getToken();
   const headers = { ...(options.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  // Don't set Content-Type for FormData — browser sets it with boundary
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = headers['Content-Type'] || 'application/json';
   }
   const res = await fetch(API_BASE + path, { ...options, headers });
-  if (res.status === 401) { Auth.logout(); throw new Error('Unauthorised'); }
+  // 401 only kicks authenticated users out — guests already have no token
+  if (res.status === 401 && Auth.isLoggedIn()) {
+    Auth.logout();
+    throw new Error('Unauthorised');
+  }
   return res;
 }
 
@@ -61,6 +82,8 @@ async function apiFetch(path, options = {}) {
 ═══════════════════════════════════════════════════ */
 function showLoginModal() {
   document.getElementById('login-modal').style.display = 'flex';
+  // Reset to login form view
+  switchToLogin();
 }
 function hideLoginModal() {
   document.getElementById('login-modal').style.display = 'none';
@@ -74,8 +97,8 @@ async function handleLogin(e) {
   const btn      = document.getElementById('login-btn');
 
   errEl.textContent = '';
-  btn.disabled = true;
-  btn.textContent  = 'Signing in...';
+  btn.disabled      = true;
+  btn.textContent   = 'Signing in...';
 
   try {
     const res  = await fetch(API_BASE + '/auth/login', {
@@ -85,25 +108,25 @@ async function handleLogin(e) {
     });
     const data = await res.json();
 
-    if (!res.ok) {
-      errEl.textContent = data.error || 'Login failed.';
-      return;
-    }
+    if (!res.ok) { errEl.textContent = data.error || 'Login failed.'; return; }
 
     Auth.setToken(data.token);
+    window._guestMode = false;
     hideLoginModal();
+    _hideGuestBanner();
+    _updateHeaderForAuth();
     onAuthSuccess();
 
   } catch (err) {
     errEl.textContent = 'Network error. Is the server running?';
   } finally {
-    btn.disabled = false;
+    btn.disabled    = false;
     btn.textContent = 'Sign In';
   }
 }
 
 function switchToRegister() {
-  document.getElementById('login-form-wrap').style.display  = 'none';
+  document.getElementById('login-form-wrap').style.display    = 'none';
   document.getElementById('register-form-wrap').style.display = 'flex';
   document.getElementById('login-error').textContent = '';
 }
@@ -122,8 +145,8 @@ async function handleRegister(e) {
   const btn      = document.getElementById('register-btn');
 
   errEl.textContent = '';
-  btn.disabled = true;
-  btn.textContent  = 'Registering...';
+  btn.disabled      = true;
+  btn.textContent   = 'Registering...';
 
   try {
     const res  = await fetch(API_BASE + '/auth/register', {
@@ -132,26 +155,57 @@ async function handleRegister(e) {
       body:    JSON.stringify({ username, email, password }),
     });
     const data = await res.json();
-
-    if (!res.ok) {
-      errEl.textContent = data.error || 'Registration failed.';
-      return;
-    }
-
-    // Auto-login after register
-    errEl.style.color = '#22c55e';
-    errEl.textContent = 'Registered! Signing in...';
+    if (!res.ok) { errEl.textContent = data.error || 'Registration failed.'; return; }
+    errEl.style.color  = '#22c55e';
+    errEl.textContent  = 'Registered! Signing in...';
     document.getElementById('login-email').value    = email;
     document.getElementById('login-password').value = password;
     switchToLogin();
     document.getElementById('login-form').dispatchEvent(new Event('submit'));
-
   } catch (err) {
     errEl.textContent = 'Network error.';
   } finally {
-    btn.disabled = false;
+    btn.disabled    = false;
     btn.textContent = 'Create Account';
   }
+}
+
+/* ═══════════════════════════════════════════════════
+   GUEST BANNER
+═══════════════════════════════════════════════════ */
+function _showGuestBanner() {
+  const banner = document.getElementById('guest-banner');
+  if (banner) banner.style.display = 'flex';
+}
+function _hideGuestBanner() {
+  const banner = document.getElementById('guest-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+/* ═══════════════════════════════════════════════════
+   HEADER STATE HELPERS
+═══════════════════════════════════════════════════ */
+function _updateHeaderForGuest() {
+  const emailEl   = document.getElementById('user-menu-email');
+  const signinEl  = document.getElementById('header-signin-link');
+  const menuSign  = document.getElementById('user-menu-signin');
+  const menuSignOut = document.getElementById('user-menu-signout');
+  if (emailEl)    emailEl.textContent       = 'Guest User';
+  if (signinEl)   signinEl.style.display    = 'flex';
+  if (menuSign)   menuSign.style.display    = 'flex';
+  if (menuSignOut) menuSignOut.style.display = 'none';
+}
+
+function _updateHeaderForAuth() {
+  const user      = Auth.getUser();
+  const emailEl   = document.getElementById('user-menu-email');
+  const signinEl  = document.getElementById('header-signin-link');
+  const menuSign  = document.getElementById('user-menu-signin');
+  const menuSignOut = document.getElementById('user-menu-signout');
+  if (emailEl)    emailEl.textContent       = user || '—';
+  if (signinEl)   signinEl.style.display    = 'none';
+  if (menuSign)   menuSign.style.display    = 'none';
+  if (menuSignOut) menuSignOut.style.display = 'flex';
 }
 
 /* ═══════════════════════════════════════════════════
@@ -164,18 +218,16 @@ function toggleUserMenu() {
 }
 
 /* ═══════════════════════════════════════════════════
-   POST-LOGIN INIT
+   POST-LOGIN / POST-GUEST INIT
 ═══════════════════════════════════════════════════ */
 function onAuthSuccess() {
-  const user = Auth.getUser();
-  if (user) {
-    // Show email in the user dropdown
+  if (!window._guestMode) {
+    const user    = Auth.getUser();
     const emailEl = document.getElementById('user-menu-email');
-    if (emailEl) emailEl.textContent = user;
+    if (emailEl && user) emailEl.textContent = user;
+    _updateHeaderForAuth();
   }
-  // Start metrics polling
   startMetricsPoll();
-  // Init dashboard charts with empty state
   initDashboardCharts();
 }
 
@@ -238,7 +290,7 @@ function animateCounter(el, target, duration) {
 }
 
 /* ═══════════════════════════════════════════════════
-   CHART DEFAULTS  (used by charts.js)
+   CHART DEFAULTS
 ═══════════════════════════════════════════════════ */
 Chart.defaults.color       = '#64748b';
 Chart.defaults.borderColor = 'rgba(255,255,255,0.04)';
@@ -259,15 +311,12 @@ const tooltipPlugin = {
    DOM READY
 ═══════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-  // Wire nav buttons
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => navigate(btn.dataset.page));
   });
 
-  // Overlay tap closes sidebar
   document.getElementById('overlay').addEventListener('click', closeSidebar);
 
-  // Click outside user menu → close it
   document.addEventListener('click', (e) => {
     const avatar = document.getElementById('user-avatar');
     const menu   = document.getElementById('user-menu');
@@ -277,14 +326,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Login / register form handlers
   document.getElementById('login-form').addEventListener('submit', handleLogin);
   document.getElementById('register-form').addEventListener('submit', handleRegister);
 
-  // Check auth state
-  if (!Auth.isLoggedIn()) {
-    showLoginModal();
-  } else {
+  // Auth gate — allow guest bypass
+  if (Auth.isLoggedIn()) {
     onAuthSuccess();
+  } else {
+    showLoginModal();
   }
 });

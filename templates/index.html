@@ -143,6 +143,20 @@
       <i class="fa-solid fa-user"></i>
     </div>
 
+    <!-- Header sign-in link — visible in guest mode only -->
+    <div id="header-signin-link"
+      onclick="showLoginModal()"
+      data-tooltip="Sign in to save results"
+      style="display:none;align-items:center;gap:6px;padding:6px 12px;
+             border-radius:8px;background:rgba(245,158,11,0.08);
+             border:1px solid rgba(245,158,11,0.22);color:var(--amber);
+             font-size:11px;font-weight:600;font-family:var(--font);
+             cursor:pointer;transition:all 0.2s;"
+      onmouseover="this.style.background='rgba(245,158,11,0.15)'"
+      onmouseout="this.style.background='rgba(245,158,11,0.08)'">
+      <i class="fa-solid fa-right-to-bracket"></i> Sign In
+    </div>
+
     <!-- User dropdown menu -->
     <div id="user-menu" style="
       display:none;position:absolute;top:calc(100% + 8px);right:24px;
@@ -155,8 +169,19 @@
         <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Signed in as</div>
         <div id="user-menu-email" style="font-size:12px;color:var(--cyan);font-weight:500;word-break:break-all;">—</div>
       </div>
-      <!-- Sign out -->
-      <button onclick="Auth.logout()" style="
+      <!-- Sign in (guest mode) -->
+      <button id="user-menu-signin" onclick="showLoginModal()" style="
+        display:none;width:100%;padding:8px 10px;border-radius:7px;
+        background:transparent;border:none;
+        color:var(--amber);font-size:12px;font-weight:600;
+        font-family:var(--font);cursor:pointer;
+        align-items:center;gap:8px;transition:background 0.18s;margin-bottom:4px;"
+        onmouseover="this.style.background='rgba(245,158,11,0.1)'"
+        onmouseout="this.style.background='transparent'">
+        <i class="fa-solid fa-right-to-bracket"></i> Sign In
+      </button>
+      <!-- Sign out (authenticated mode) -->
+      <button id="user-menu-signout" onclick="Auth.logout()" style="
         width:100%;padding:8px 10px;border-radius:7px;
         background:transparent;border:none;
         color:var(--red);font-size:12px;font-weight:600;
@@ -169,6 +194,29 @@
       </button>
     </div>
   </header>
+
+  <!-- Guest mode banner — hidden by default, shown when in guest mode -->
+  <div id="guest-banner" style="
+    display:none;align-items:center;justify-content:space-between;
+    gap:12px;padding:10px 24px;flex-wrap:wrap;
+    background:rgba(245,158,11,0.07);
+    border-bottom:1px solid rgba(245,158,11,0.18);">
+    <div style="display:flex;align-items:center;gap:9px;font-size:12px;color:var(--amber);">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span>You are browsing as a <strong>Guest</strong>. Detections are not saved and session data cannot be downloaded.</span>
+    </div>
+    <button onclick="showLoginModal()" style="
+      padding:5px 14px;border-radius:7px;
+      background:rgba(245,158,11,0.15);
+      border:1px solid rgba(245,158,11,0.35);
+      color:var(--amber);font-size:11px;font-weight:600;
+      font-family:var(--font);cursor:pointer;white-space:nowrap;
+      transition:background 0.2s;"
+      onmouseover="this.style.background='rgba(245,158,11,0.25)'"
+      onmouseout="this.style.background='rgba(245,158,11,0.15)'">
+      <i class="fa-solid fa-right-to-bracket"></i> Sign In
+    </button>
+  </div>
 
   <!-- PAGES -->
   <main>
@@ -594,6 +642,24 @@
 
       <div style="text-align:center;font-size:11px;color:var(--text3);">
         No account? <span onclick="switchToRegister()" style="color:var(--cyan);cursor:pointer;">Create one</span>
+      </div>
+
+      <!-- Guest mode option -->
+      <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:14px;text-align:center;">
+        <button onclick="enterGuestMode()" style="
+          width:100%;padding:9px;border-radius:8px;
+          background:transparent;
+          border:1px solid rgba(255,255,255,0.08);
+          color:var(--text3);font-size:12px;font-family:var(--font);
+          cursor:pointer;transition:all 0.2s;
+          display:flex;align-items:center;justify-content:center;gap:7px;"
+          onmouseover="this.style.borderColor='rgba(245,158,11,0.35)';this.style.color='var(--amber)'"
+          onmouseout="this.style.borderColor='rgba(255,255,255,0.08)';this.style.color='var(--text3)'">
+          <i class="fa-solid fa-user-secret"></i> Continue as Guest
+        </button>
+        <div style="font-size:10px;color:var(--text3);margin-top:7px;line-height:1.5;">
+          Detection works · Results not saved · No download
+        </div>
       </div>
     </div>
 

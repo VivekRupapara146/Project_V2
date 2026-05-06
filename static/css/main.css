@@ -735,8 +735,18 @@ input[type="range"]::-webkit-slider-thumb {
   main { padding: 14px; }
 }
 
-/* Overlay for mobile sidebar */
-#overlay {
+/* ═══════════════════════════════════════════════════
+   GUEST MODE
+═══════════════════════════════════════════════════ */
+#guest-banner {
+  position: sticky;
+  top: 65px;         /* sits just below the sticky header */
+  z-index: 49;
+}
+
+#guest-dl-nudge {
+  animation: fadeInUp 0.3s ease forwards;
+}
   display: none;
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.6); z-index: 99;

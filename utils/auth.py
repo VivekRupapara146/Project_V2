@@ -27,14 +27,9 @@ logger = logging.getLogger(__name__)
 # ── Configuration ─────────────────────────────────────────────────────────────
 # CRITICAL: Set a strong secret in production via environment variable.
 # Never hardcode this in source code.
-JWT_SECRET = os.getenv("JWT_SECRET")
-
-if not JWT_SECRET:
-    raise RuntimeError("JWT_SECRET environment variable not set")
-
-JWT_ALGORITHM = "HS256"
-
-JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "24")) 
+JWT_SECRET      = os.getenv("JWT_SECRET", "change-this-secret-in-production")
+JWT_ALGORITHM   = "HS256"
+JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "24"))
 
 if JWT_SECRET == "change-this-secret-in-production":
     logger.warning(
@@ -96,34 +91,48 @@ def decode_token(token: str) -> dict | None:
 def require_auth(f):
     """
     Decorator that protects a Flask route with JWT authentication.
-
-    Expects header:
-        Authorization: Bearer <token>
-
-    On success, sets g.current_user = email string.
-    On failure, returns 401 JSON response.
-
-    Usage:
-        @app.get("/detections")
-        @require_auth
-        def detections_list(): ...
+    Returns 401 if token is missing or invalid.
     """
     @wraps(f)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
-
         if not auth_header.startswith("Bearer "):
             return jsonify({"error": "Missing or malformed Authorization header."}), 401
-
         token = auth_header.split(" ", 1)[1].strip()
         payload = decode_token(token)
-
         if payload is None:
             return jsonify({"error": "Invalid or expired token."}), 401
-
         g.current_user = payload.get("sub")
         return f(*args, **kwargs)
+    return decorated
 
+
+def optional_auth(f):
+    """
+    Decorator for routes accessible to both authenticated users and guests.
+
+    - Valid JWT present  → g.current_user = email string (authenticated)
+    - No token / invalid → g.current_user = None          (guest mode)
+    - Never returns 401  — always calls the route handler
+
+    Routes using this decorator must check g.current_user themselves
+    to decide whether to persist data or restrict features.
+
+    Usage:
+        @app.post("/predict")
+        @optional_auth
+        def predict(): ...
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        g.current_user = None   # default: guest
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+            payload = decode_token(token)
+            if payload:
+                g.current_user = payload.get("sub")
+        return f(*args, **kwargs)
     return decorated
 
 

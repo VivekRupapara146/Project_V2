@@ -38,7 +38,7 @@ from utils.rate_limiter import (
     DETECTIONS_LIMIT,
     ANALYTICS_LIMIT,
 )
-from utils.auth    import require_auth, register_routes as register_auth_routes
+from utils.auth    import require_auth, optional_auth, register_routes as register_auth_routes
 from utils.metrics import register_metrics_route, record_error
 from utils.cache import (
     get_cached, set_cache,
@@ -88,7 +88,7 @@ def index():
 # ─────────────────────────────────────────────────────────────────────────────
 @app.post("/predict")
 @limiter.limit(PREDICT_LIMIT)
-@require_auth
+@optional_auth
 def predict():
     """
     Accept an image file and return object detections as JSON.
@@ -323,7 +323,7 @@ def stream_status():
 # ─────────────────────────────────────────────────────────────────────────────
 @app.post("/predict_video")
 @limiter.limit(PREDICT_LIMIT)
-@require_auth
+@optional_auth
 def predict_video():
     """
     Accept an uploaded video file, run detection on every frame,
@@ -408,7 +408,7 @@ def predict_video():
 # ─────────────────────────────────────────────────────────────────────────────
 @app.post("/upload_video_stream")
 @limiter.limit(PREDICT_LIMIT)
-@require_auth
+@optional_auth
 def upload_video_stream():
     """
     Accept an uploaded video file, save it to /tmp, and return the temp path

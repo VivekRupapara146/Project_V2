@@ -24,7 +24,7 @@ from pymongo.errors import ConnectionFailure, OperationFailure
 logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-MONGO_URI = os.getenv("MONGO_URI")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://vivekrupaparag_db_user:lBEulu6duehDI6ny@cluster0.24idgza.mongodb.net/?appName=Cluster0")
 if not MONGO_URI:
     raise RuntimeError("MONGO_URI environment variable not set")
 

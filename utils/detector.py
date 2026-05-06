@@ -2,7 +2,6 @@
 detector.py
 Core inference logic using YOLOv8.
 
-
 v3 additions:
   - track_inference() context manager wraps model call for latency/FPS metrics
   - record_error("inference") on any model failure
@@ -25,8 +24,7 @@ ALLOWED_CLASSES = {"person", "bicycle", "car", "bus", "motorbike", "traffic ligh
 
 
 def download_model():
-    url = os.getenv("MODEL_URL")
-
+    url = os.getenv("MODEL_URL", "https://drive.google.com/uc?id=15ZpNO8wPa9I2vHTJHetVeEh1v8z2MCid")
     if not url:
         raise RuntimeError("MODEL_URL environment variable not set")
 

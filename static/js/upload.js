@@ -42,9 +42,44 @@ function _refreshDownloadBtn() {
   const btn = document.getElementById('download-session-btn');
   if (!btn) return;
   const count = window._sessionHistory.length;
+
+  // Guests cannot download — hide button and show sign-in nudge instead
+  if (window._guestMode) {
+    btn.style.display = 'none';
+    _showGuestNudge(count);
+    return;
+  }
+
   btn.style.display = count === 0 ? 'none' : 'flex';
   const countEl = btn.querySelector('#dl-count');
   if (countEl) countEl.textContent = count;
+  _hideGuestNudge();
+}
+
+function _showGuestNudge(count) {
+  let nudge = document.getElementById('guest-dl-nudge');
+  if (!nudge) {
+    nudge = document.createElement('div');
+    nudge.id = 'guest-dl-nudge';
+    nudge.style.cssText = `
+      display:flex;align-items:center;gap:7px;padding:6px 12px;
+      border-radius:8px;background:rgba(245,158,11,0.08);
+      border:1px solid rgba(245,158,11,0.22);color:var(--amber);
+      font-size:11px;font-weight:500;cursor:pointer;
+    `;
+    nudge.innerHTML = `<i class="fa-solid fa-lock"></i> Sign in to download (${count} result${count !== 1 ? 's' : ''})`;
+    nudge.onclick = () => showLoginModal();
+    const header = document.getElementById('header');
+    if (header) header.appendChild(nudge);
+  } else {
+    nudge.innerHTML = `<i class="fa-solid fa-lock"></i> Sign in to download (${count} result${count !== 1 ? 's' : ''})`;
+    nudge.style.display = 'flex';
+  }
+}
+
+function _hideGuestNudge() {
+  const nudge = document.getElementById('guest-dl-nudge');
+  if (nudge) nudge.style.display = 'none';
 }
 
 // ── Download ──────────────────────────────────────

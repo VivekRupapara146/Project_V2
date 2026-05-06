@@ -51,7 +51,7 @@ def draw_boxes(image: np.ndarray, detections: list[dict]) -> np.ndarray:
         text  = f"{label} {conf:.0%}"
         font  = cv2.FONT_HERSHEY_SIMPLEX
         scale = 0.55
-        thick = 1
+        thick = 2
         (tw, th), baseline = cv2.getTextSize(text, font, scale, thick)
 
         # Keep label inside frame boundaries
